@@ -14,7 +14,7 @@ import { SiteFooter } from '@/components/SiteFooter';
 import { Ticker } from '@/components/Ticker';
 
 export const metadata: Metadata = {
-  title: { default: 'Proofcade', template: '%s · Proofcade' },
+  title: { default: "Sigmafun", template: "%s · Sigmafun" },
   description: 'Theorem-backed coins on Robinhood Chain, in a pixel arcade.',
 };
 

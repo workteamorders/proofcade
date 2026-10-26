@@ -30,8 +30,8 @@ export function SiteHeader() {
   return (
     <header className="top">
       <div className="wrap">
-        <Link className="logo" href="/" aria-label="Proofcade home">
-          <canvas ref={logo} width={16} height={16} aria-hidden="true" /><span>PROOFCADE</span>
+        <Link className="logo" href="/" aria-label="Sigmafun home">
+          <canvas ref={logo} width={16} height={16} aria-hidden="true" /><span>SIGMA<i>FUN</i></span>
         </Link>
         <nav className="nav" aria-label="Main">
           {NAV.map((n) => (

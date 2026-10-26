@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useApp } from '@/lib/app';
 import { PHASE, type Coin } from '@/lib/data';
-import { eth, fmt } from '@/lib/util';
+import { eth, fmt, usd } from '@/lib/util';
 import { changeColor, CoinCard, FormalBadge, HpBar, RigorBadge } from '../ui';
 import { Px } from '../Px';
 import Link from 'next/link';
@@ -40,7 +40,7 @@ export function ExploreView() {
       <h1 style={{ margin: '14px 0 26px' }}>Explore coins</h1>
       <div className="toolbar on-dark">
         <div className="seg" role="group" aria-label="Collection">
-          <button aria-pressed={tab === 'native'} onClick={() => { setTab('native'); setShown(12); }}>Proofcade launches ({nativeCount})</button>
+          <button aria-pressed={tab === 'native'} onClick={() => { setTab('native'); setShown(12); }}>Sigmafun launches ({nativeCount})</button>
           <button aria-pressed={tab === 'all'} onClick={() => { setTab('all'); setShown(12); }}>All Pons</button>
         </div>
         <div className="grow">
@@ -76,7 +76,7 @@ export function ExploreView() {
                   <td>{c.native ? <RigorBadge r={c.rigor} /> : '—'} {c.formal && <FormalBadge />}</td>
                   <td className="r">{fmt(c.price)}</td>
                   <td className="r" style={{ color: changeColor(c.change) }}>{c.change >= 0 ? '+' : ''}{c.change.toFixed(1)}%</td>
-                  <td className="r">{eth(c.mcap)}</td>
+                  <td className="r">{usd(c.mcap)}</td>
                   <td className="r">{eth(c.vol)}</td>
                   <td style={{ minWidth: 150 }}>{c.phase === 0 ? <HpBar p={c.progress} /> : PHASE[c.phase]}</td>
                   <td className="r">{c.age}</td>

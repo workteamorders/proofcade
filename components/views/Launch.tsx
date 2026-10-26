@@ -8,7 +8,7 @@ import { avatar, setAvatar } from '@/lib/sprites';
 
 const STEPS: [string, string, string][] = [
   ['Identity', 'Name your coin', 'Pick a name, ticker and logo. They can never be changed after launch.'],
-  ['Theorem', 'State your theorem', 'Every Proofcade coin carries a mathematical statement and an AI rigor score.'],
+  ['Theorem', 'State your theorem', 'Every Sigmafun coin carries a mathematical statement and an AI rigor score.'],
   ['Economics', 'Set the economics', 'Choose what the coin trades against, your creator fee and an optional dev buy.'],
   ['Review', 'Review and launch', 'Check everything. Pons launch settings are permanent.'],
 ];
@@ -35,7 +35,7 @@ function errorsFor(step: number, w: Form): Record<string, string> {
 /** The staged "launching…" dialog. Calls onDone once the demo transaction has "confirmed". */
 function LaunchProgress({ form, onDone }: { form: Form; onDone: (coin: Coin) => void }) {
   const app = useApp();
-  const steps = ['Signing in with your wallet', 'Uploading logo and theorem to IPFS', 'Waiting for your signature', 'Confirming on Robinhood Chain', 'Recording the launch on Proofcade'];
+  const steps = ['Signing in with your wallet', 'Uploading logo and theorem to IPFS', 'Waiting for your signature', 'Confirming on Robinhood Chain', 'Recording the launch on Sigmafun'];
   const [i, setI] = useState(0);
   const { coins, address } = app;
   useEffect(() => {

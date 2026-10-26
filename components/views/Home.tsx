@@ -25,7 +25,7 @@ export function HomeView() {
     <>
       <section className="hero" aria-labelledby="h">
         <div>
-          <div className="eyebrow"><b>Proofcade</b> · Robinhood Chain · Routed through Pons</div>
+          <div className="eyebrow"><b>Sigmafun</b> · Robinhood Chain · Routed through Pons</div>
           <h1 id="h">Every coin is a level. <span className="hl">Every level is a theorem.</span></h1>
           <p className="lead">Theorem-backed coins. Formally verified. Fully on-chain. Pick a statement, read its rigor score, then press start.</p>
           <div className="cta">

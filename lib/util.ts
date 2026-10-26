@@ -16,6 +16,15 @@ export function fmt(v: number): string {
 }
 
 export const eth = (v: number) => `${fmt(v)} ETH`;
+
+/** Sample ETH/USD rate used to show market caps in dollars. Replace with a live price feed in the real app. */
+export const ETH_USD = 3000;
+/** Market cap (given in ETH) as a compact dollar amount, e.g. $12.6K or $1.2M. */
+export const usd = (ethValue: number) => {
+  const d = ethValue * ETH_USD;
+  if (d >= 1000) return '$' + d.toLocaleString('en-US', { notation: 'compact', maximumFractionDigits: 1 });
+  return '$' + d.toLocaleString('en-US', { maximumFractionDigits: 0 });
+};
 export const short = (a: string) => a.slice(0, 6) + '…' + a.slice(-4);
 export const rand = (n: number) => Math.floor(Math.random() * n);
 

@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { useEffect, useRef } from 'react';
 import { PHASE, type Coin, type ChatMsg } from '@/lib/data';
-import { eth } from '@/lib/util';
+import { eth, usd } from '@/lib/util';
 import { coinCanvas } from '@/lib/sprites';
 import { useApp } from '@/lib/app';
 import { Px } from './Px';
@@ -43,7 +43,7 @@ export function CoinCard({ c, rank, vol }: { c: Coin; rank?: number; vol?: boole
       </span>
       <span className="cart-stmt">{c.native ? c.statement : c.blurb}</span>
       <span className="cart-row">
-        <span>{vol ? '24h vol' : 'MC'} <b>{eth(vol ? c.vol : c.mcap)}</b></span>
+        <span>{vol ? '24h vol' : 'MC'} <b>{vol ? eth(c.vol) : usd(c.mcap)}</b></span>
         <span style={{ color: changeColor(c.change) }}>{c.change >= 0 ? '▲' : '▼'} {Math.abs(c.change).toFixed(1)}%</span>
       </span>
       <HpBar p={c.progress} />

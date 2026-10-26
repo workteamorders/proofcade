@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { useApp } from '@/lib/app';
-import { eth, fmt, short } from '@/lib/util';
+import { eth, fmt, short, usd } from '@/lib/util';
 import { changeColor, RigorBadge } from '../ui';
 import { Px } from '../Px';
 
@@ -66,7 +66,7 @@ export function PortfolioView() {
           <div className="tabpanel">
             {mine.length ? (
               <div className="scroll-x"><table className="list"><thead><tr><th>Coin</th><th className="r">MCap</th><th className="r">Age</th></tr></thead>
-                <tbody>{mine.map((c) => <tr key={c.id} tabIndex={0} onClick={() => router.push(`/coin/${c.id}`)}><td><span className="cell-coin"><Px seed={c.id} /><b>${c.ticker}</b></span></td><td className="r">{eth(c.mcap)}</td><td className="r">{c.age}</td></tr>)}</tbody></table></div>
+                <tbody>{mine.map((c) => <tr key={c.id} tabIndex={0} onClick={() => router.push(`/coin/${c.id}`)}><td><span className="cell-coin"><Px seed={c.id} /><b>${c.ticker}</b></span></td><td className="r">{usd(c.mcap)}</td><td className="r">{c.age}</td></tr>)}</tbody></table></div>
             ) : (<p className="muted">You haven&apos;t launched a coin yet. <Link href="/launch" style={{ color: 'var(--ink)' }}>Start a launch →</Link></p>)}
           </div>
         )}

@@ -1,4 +1,4 @@
-# Proofcade
+# Sigmafun
 
 Theorem-backed coins on Robinhood Chain, rebuilt as a pixel arcade. Next.js 16 (App Router), React 19, TypeScript.
 The layout follows the Harmonic Agent site (navy ground, white raised panels, mono labels, one signal colour); the look is arcade.

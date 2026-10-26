@@ -4,7 +4,7 @@ export type Coin = {
   id: string;
   ticker: string;
   name: string;
-  /** Theorem statement. Only coins launched on Proofcade have one. */
+  /** Theorem statement. Only coins launched on Sigmafun have one. */
   statement?: string;
   /** Plain description for coins that came from the wider Pons market. */
   blurb?: string;
@@ -70,13 +70,13 @@ export type ChatMsg = {
 };
 
 const MSG_SEEDS: [ChatMsg['kind'], string, string, string, number][] = [
-  ['sys', 'PROOFCADE', '$ZETA launched.', 'riemann', 3],
+  ['sys', 'SIGMAFUN', '$ZETA launched.', 'riemann', 3],
   ['user', 'SnugChalkWalrus', 'prime is the safest proof on the board. formal check is in, rigor 97.', 'prime', 11],
   ['user', 'RareSandAntler', 'fermat curve at 62%. graduation soon.', 'fermat', 14],
-  ['sys', 'PROOFCADE', 'Big buy: 0xA17c…92fe bought 1.8 ETH of $EULER.', 'euler', 22],
+  ['sys', 'SIGMAFUN', 'Big buy: 0xA17c…92fe bought 1.8 ETH of $EULER.', 'euler', 22],
   ['user', 'WittyFogIsland', 'who is checking the zeta lean proof?', 'riemann', 31],
   ['user', 'CleverPewterValley', 'GAUSS +40% today. i only read the statement and bought.', 'gauss', 46],
-  ['sys', 'PROOFCADE', '$SWITCH graduated to Uniswap V4.', 'monty', 58],
+  ['sys', 'SIGMAFUN', '$SWITCH graduated to Uniswap V4.', 'monty', 58],
 ];
 
 export const INITIAL_MSGS: ChatMsg[] = MSG_SEEDS.map(([kind, who, text, coinId, ago], i) => ({

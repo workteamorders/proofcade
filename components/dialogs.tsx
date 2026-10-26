@@ -24,7 +24,7 @@ export function ConnectDialog({ reason }: { reason?: string }) {
   }
   return (
     <div className="dlg-body">
-      <p>{reason || 'Connect a wallet to play.'} Proofcade is non-custodial. Your keys never leave your wallet.</p>
+      <p>{reason || 'Connect a wallet to play.'} Sigmafun is non-custodial. Your keys never leave your wallet.</p>
       <div className="wlist">
         {WALLETS.map((w, i) => (
           <button key={w.name} className="wopt" onClick={() => setPick(i)}>
@@ -65,7 +65,7 @@ export function RiskDialog() {
         <p>Launching and trading memecoins is highly speculative. Read this once.</p>
         <ul className="risk-list">
           <li>You can lose everything you put in.</li>
-          <li>Coins are issued by their creators, not by Proofcade.</li>
+          <li>Coins are issued by their creators, not by Sigmafun.</li>
           <li>Rigor scores are an AI estimate, not a proof check.</li>
           <li>Pons V2 is unaudited software.</li>
         </ul>

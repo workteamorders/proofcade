@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '@/lib/app';
 import { PHASE, type Coin } from '@/lib/data';
-import { addrOf, eth, fmt, hex, rng, short } from '@/lib/util';
+import { addrOf, eth, fmt, hex, rng, short, usd } from '@/lib/util';
 import { FormalBadge, HpBar, Msg, RigorBadge } from '../ui';
 import { Px } from '../Px';
 import { useSubmitProof } from '../SubmitProof';
@@ -172,7 +172,7 @@ function TabPanel({ c, tab }: { c: Coin; tab: string }) {
     return m.length ? <div className="feed">{m.map((x) => <Msg key={x.id} m={x} />)}</div> : <p className="muted">No callouts for this coin yet.</p>;
   }
   if (tab === 'theorem') {
-    if (!c.native) return (<><p className="muted">This coin wasn&apos;t launched on Proofcade, so it carries no theorem. Its description:</p><p>{c.blurb}</p></>);
+    if (!c.native) return (<><p className="muted">This coin wasn&apos;t launched on Sigmafun, so it carries no theorem. Its description:</p><p>{c.blurb}</p></>);
     return (
       <>
         <div className="theorem screen" style={{ boxShadow: 'none', borderWidth: '0 0 0 10px', borderColor: 'var(--coin)' }}><small>Theorem</small>{c.statement}</div>
@@ -223,14 +223,14 @@ export function CoinView({ id }: { id: string }) {
                 {c.native && <RigorBadge r={c.rigor} />}{c.formal && <FormalBadge />}
                 <div className="share">
                   <button className="btn sm ghost" onClick={() => { void navigator.clipboard?.writeText(location.href).catch(() => {}); app.toast('COPIED', 'Link copied.'); }}>Copy link</button>
-                  <a className="btn sm ghost" href={`https://x.com/intent/post?text=${encodeURIComponent('$' + c.ticker + ' on Proofcade')}`} target="_blank" rel="noopener noreferrer">Post on X</a>
+                  <a className="btn sm ghost" href={`https://x.com/intent/post?text=${encodeURIComponent('$' + c.ticker + ' on Sigmafun')}`} target="_blank" rel="noopener noreferrer">Post on X</a>
                 </div>
               </div>
             </div>
           </div>
           <div className="kv on-dark">
             <div><span className="label" style={{ color: 'var(--hero-faint)' }}>Price</span><span className="v">{eth(c.price)}</span></div>
-            <div><span className="label" style={{ color: 'var(--hero-faint)' }}>MCap</span><span className="v">{eth(c.mcap)}</span></div>
+            <div><span className="label" style={{ color: 'var(--hero-faint)' }}>MCap</span><span className="v">{usd(c.mcap)}</span></div>
             <div><span className="label" style={{ color: 'var(--hero-faint)' }}>24h vol</span><span className="v">{eth(c.vol)}</span></div>
             <div><span className="label" style={{ color: 'var(--hero-faint)' }}>24h</span><span className={`v ${c.change >= 0 ? 'up' : 'down'}`}>{c.change >= 0 ? '+' : ''}{c.change.toFixed(1)}%</span></div>
           </div>

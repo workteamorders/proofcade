@@ -438,3 +438,4 @@ footer .demo { margin-top: 18px; padding: 12px 14px; border: 2px dashed var(--ed
 .hole .sp { position: absolute; left: 50%; bottom: 0; width: 72%; image-rendering: pixelated; transform: translate(-50%, 0); animation: popup .14s steps(3); pointer-events: none; }
 @keyframes popup { from { transform: translate(-50%, 100%); } }
 @media (prefers-reduced-motion: reduce) { .cart, .cab, .cabinet { transition: none; transform: none !important; } .sym, .bigcoin { translate: none; } }
+.logo span i { font-style: normal; color: var(--coin); }
