@@ -2,8 +2,9 @@ import './polyfill';
 import { clusterApiUrl, PublicKey, SystemProgram } from '@solana/web3.js';
 
 /**
- * Solana cluster. Devnet first; flip NEXT_PUBLIC_SOLANA_CLUSTER to `mainnet-beta` (and set a dedicated
- * NEXT_PUBLIC_SOLANA_RPC_URL, the public endpoint is rate-limited) to go live. Nothing else changes.
+ * Solana cluster. Devnet first; flip NEXT_PUBLIC_SOLANA_CLUSTER to `mainnet-beta` to go live.
+ * RPC: the browser talks to this site's own /api/rpc, which forwards to the secret SOLANA_RPC_URL (server only).
+ * Setting NEXT_PUBLIC_SOLANA_RPC_URL instead sends the browser straight to that URL, so never put a key in it.
  */
 const env = (v: string | undefined, d: string) => (v && v.trim() ? v.trim() : d);
 
@@ -11,7 +12,9 @@ export type Cluster = 'devnet' | 'mainnet-beta';
 export const CLUSTER: Cluster = process.env.NEXT_PUBLIC_SOLANA_CLUSTER === 'mainnet-beta' ? 'mainnet-beta' : 'devnet';
 export const IS_TEST = CLUSTER !== 'mainnet-beta';
 export const NETWORK_NAME = IS_TEST ? 'Solana Devnet' : 'Solana';
-export const RPC_URL = env(process.env.NEXT_PUBLIC_SOLANA_RPC_URL, clusterApiUrl(CLUSTER));
+export const PUBLIC_RPC_URL = env(process.env.NEXT_PUBLIC_SOLANA_RPC_URL, '');
+/** The RPC endpoint the browser should use. */
+export const rpcEndpoint = () => PUBLIC_RPC_URL || (typeof window !== 'undefined' ? `${window.location.origin}/api/rpc` : clusterApiUrl(CLUSTER));
 
 export const EXPLORER = 'https://solscan.io';
 const q = IS_TEST ? '?cluster=devnet' : '';

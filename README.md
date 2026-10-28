@@ -38,7 +38,7 @@ reticle. Every click outside an element marked `data-nogun` fires a gunshot (`li
 
 The app talks to the real pump.fun program (`6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P`, the same address on devnet and mainnet) through `@pump-fun/pump-sdk`. There is no backend.
 
-- Cluster: `NEXT_PUBLIC_SOLANA_CLUSTER=devnet` (default) or `mainnet-beta`. That one variable also switches the explorer links and the DEVNET chip. Use your own RPC in `NEXT_PUBLIC_SOLANA_RPC_URL`; the public one is rate-limited, and mainnet needs a real provider.
+- Cluster: `NEXT_PUBLIC_SOLANA_CLUSTER=devnet` (default) or `mainnet-beta`. That one variable also switches the explorer links and the DEVNET chip. Put your RPC provider URL in the **secret** `SOLANA_RPC_URL` (server only, no `NEXT_PUBLIC_` prefix): the browser reaches it through this site's `/api/rpc`, which forwards only the methods the app uses and only for requests from this site, so the key never reaches the browser. Public values live in `NEXT_PUBLIC_*`; see `.env.example`.
 - Wallet: Solana wallet adapter with Phantom, Solflare and Wallet Standard auto-detection. For devnet, switch Phantom to Testnet Mode (Settings, Developer Settings) and fund it from a devnet faucet.
 - Coins: every launch carries a Theorem tag account and a memo (mint, name, ticker, statement). The site lists the tag's signatures, checks that the curve exists and that the memo signer is the coin's creator, then reads each bonding curve live (`lib/sol/market.ts`).
 - Trades and charts: parsed from the balance changes of each curve's transactions. "Raised" is SOL in the curve; change is since launch.
