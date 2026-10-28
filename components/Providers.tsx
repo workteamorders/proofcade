@@ -1,27 +1,38 @@
 'use client';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
-import { AppContext, type AppCtx, type DialogSpec, type TradeCheck } from '@/lib/app';
-import { INITIAL_COINS, INITIAL_MSGS, INITIAL_PROOFS, type ChatMsg, type Coin, type ProofRow } from '@/lib/data';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useConnection, useWallet } from '@solana/wallet-adapter-react';
+import { AppContext, type AppCtx, type DialogSpec } from '@/lib/app';
+import { type ChatMsg, type Coin } from '@/lib/data';
 import { audio, sfx } from '@/lib/audio';
 import { short } from '@/lib/util';
+import { ago, readCostBasis, readHoldings, readMarket, type Market } from '@/lib/sol/market';
+import type { Wallet } from '@/lib/sol/tx';
 import { AccountDialog, ConnectDialog, RiskDialog } from './dialogs';
 
-const DEMO_ADDRESS = '0x7a3fb1e9c05d2480a6be1137d9c24a5f8e91c91e';
 type Toast = { id: number; title: string; text: string };
+const NO_COINS: Coin[] = [];
 
 export function Providers({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const qc = useQueryClient();
 
-  /* ---- wallet (demo) ---- */
-  const [connected, setConnected] = useState(false);
-  const [balance, setBalance] = useState(1.284);
-  const [holdings, setHoldings] = useState<Record<string, number>>({});
-  const [costBasis, setCostBasis] = useState<Record<string, number>>({});
+  /* ---- wallet (Solana wallet adapter) ---- */
+  const { connection: conn } = useConnection();
+  const w = useWallet();
+  const pk = w.publicKey;
+  const address = pk?.toBase58();
+  const connected = w.connected && !!pk;
+  const balQ = useQuery({
+    queryKey: ['sol-balance', address],
+    enabled: connected,
+    refetchInterval: 12_000,
+    queryFn: () => conn.getBalance(pk!, 'confirmed'),
+  });
   const [riskOK, setRiskOK] = useState(false);
-  /* refs let queued callbacks see the latest wallet state after the connect dialog resolves */
-  const live = useRef({ connected, balance, holdings, riskOK });
-  live.current = { connected, balance, holdings, riskOK };
+  const live = useRef({ connected, riskOK });
+  live.current = { connected, riskOK };
   const pendingWallet = useRef<(() => void) | null>(null);
   const pendingRisk = useRef<(() => void) | null>(null);
 
@@ -55,21 +66,19 @@ export function Providers({ children }: { children: ReactNode }) {
   }, [toast]);
 
   /* ---- wallet actions ---- */
-  const completeConnect = useCallback((walletName: string) => {
-    setConnected(true);
-    setHoldings({ fermat: 1_200_000, prime: 640_000, gauss: 2_100_000 });
-    setCostBasis({ fermat: 0.0031, prime: 0.0021, gauss: 0.0011 });
-    live.current.connected = true;
-    setDialog(null);
-    toast('PLAYER 1 READY', `${walletName} connected on Robinhood Chain.`);
-    const p = pendingWallet.current; pendingWallet.current = null;
-    if (p) setTimeout(p, 0);
-  }, [toast]);
+  const wasConnected = useRef(false);
+  useEffect(() => {
+    if (connected && !wasConnected.current) {
+      setDialog((d) => (d && d.title === 'Insert coin' ? null : d));
+      toast('PLAYER 1 READY', `${short(address!)} connected.`);
+      const p = pendingWallet.current; pendingWallet.current = null;
+      if (p) setTimeout(p, 0);
+    }
+    if (!connected && wasConnected.current) toast('GAME OVER', 'Wallet disconnected.');
+    wasConnected.current = connected;
+  }, [connected, address, toast]);
 
-  const disconnect = useCallback(() => {
-    setConnected(false); setHoldings({}); setDialog(null);
-    toast('GAME OVER', 'Wallet disconnected.');
-  }, [toast]);
+  const disconnect = useCallback(() => { void w.disconnect().catch(() => {}); setDialog(null); }, [w]);
 
   const openWallet = useCallback(() => {
     showDialog(live.current.connected ? { title: 'Player 1', node: <AccountDialog /> } : { title: 'Insert coin', node: <ConnectDialog /> });
@@ -93,59 +102,75 @@ export function Providers({ children }: { children: ReactNode }) {
     if (f) setTimeout(f, 0);
   }, []);
 
-  const validateTrade = useCallback((coin: Coin, side: 'buy' | 'sell', amount: number): TradeCheck => {
-    const l = live.current;
-    if (side === 'buy' && amount > l.balance) return { ok: false, msg: 'Not enough ETH.' };
-    if (side === 'sell' && amount > (l.holdings[coin.id] || 0)) return { ok: false, msg: `Not enough $${coin.ticker}.` };
-    return { ok: true };
-  }, []);
+  const sendTransaction = w.sendTransaction;
+  const signer = useMemo<Wallet | null>(() => (pk ? { publicKey: pk, sendTransaction: sendTransaction as Wallet['sendTransaction'] } : null), [pk, sendTransaction]);
 
-  const applyTrade = useCallback((coin: Coin, side: 'buy' | 'sell', amountIn: number, amountOut: number) => {
-    if (side === 'buy') {
-      setBalance((b) => b - amountIn);
-      setHoldings((h) => ({ ...h, [coin.id]: (h[coin.id] || 0) + amountOut }));
-      setCostBasis((c) => ({ ...c, [coin.id]: coin.price }));
-    } else {
-      setBalance((b) => b + amountOut);
-      setHoldings((h) => ({ ...h, [coin.id]: (h[coin.id] || 0) - amountIn }));
-    }
-  }, []);
+  /* ---- market, straight from the chain ---- */
+  const marketQ = useQuery({
+    queryKey: ['market'],
+    refetchInterval: 20_000,
+    queryFn: () => readMarket(conn, qc.getQueryData<Market>(['market'])),
+  });
+  const coins = marketQ.data?.coins ?? NO_COINS;
+  const pump = useMemo(() => (marketQ.data ? { global: marketQ.data.global, feeConfig: marketQ.data.feeConfig } : null), [marketQ.data]);
 
-  /* ---- market ---- */
-  const [coins, setCoins] = useState<Coin[]>(INITIAL_COINS);
-  const addCoin = useCallback((c: Coin) => setCoins((cs) => [c, ...cs]), []);
-  const getCoin = useCallback((id: string) => coins.find((c) => c.id === id), [coins]);
+  const holdQ = useQuery({
+    queryKey: ['holdings', address, coins.length],
+    enabled: connected && coins.length > 0,
+    refetchInterval: 20_000,
+    queryFn: () => readHoldings(conn, pk!, coins),
+  });
+  const costQ = useQuery({
+    queryKey: ['cost', address, coins.length],
+    enabled: connected && coins.length > 0,
+    staleTime: 60_000,
+    queryFn: () => readCostBasis(conn, pk!, coins),
+  });
+  const holdings = useMemo(() => (connected ? holdQ.data ?? {} : {}), [connected, holdQ.data]);
+  const costBasis = useMemo(() => (connected ? costQ.data ?? {} : {}), [connected, costQ.data]);
+  const myCoins = useMemo(() => coins.map((c) => (address && c.creator === address ? { ...c, mine: true } : c)), [coins, address]);
+  const getCoin = useCallback((id: string) => myCoins.find((c) => c.id === id), [myCoins]);
 
-  /* ---- chat ---- */
-  const [msgs, setMsgs] = useState<ChatMsg[]>(INITIAL_MSGS);
+  const refresh = useCallback(async () => {
+    await Promise.all(['market', 'holdings', 'cost', 'sol-balance', 'trades', 'user-trades'].map((k) => qc.invalidateQueries({ queryKey: [k] })));
+  }, [qc]);
+
+  /* ---- callouts: on-chain activity, plus posts kept in this browser ---- */
+  const [posts, setPosts] = useState<ChatMsg[]>([]);
   const [toastsOn, setToastsOn] = useState(true);
+  const sys = useMemo<ChatMsg[]>(() => {
+    const now = Date.now() / 1000;
+    return coins.slice().sort((a, b) => b.order - a.order).slice(0, 30).map((c): ChatMsg => ({ id: c.order, kind: 'sys', who: 'THEOREM', text: `$${c.ticker} launched.`, coinId: c.id, ago: `${ago(c.created, now)} ago`, re: { r: 0, e: 0, s: 0 }, me: {} }));
+  }, [coins]);
+  const [reacts, setReacts] = useState<Record<number, { me: ChatMsg['me']; re: ChatMsg['re'] }>>({});
+  const msgs = useMemo(() => [...posts, ...sys].map((m) => (reacts[m.id] ? { ...m, ...reacts[m.id] } : m)), [posts, sys, reacts]);
   const postMsg = useCallback((text: string) => {
-    setMsgs((m) => [{ id: Date.now(), kind: 'user', who: short(DEMO_ADDRESS), text, coinId: '', ago: 0, re: { r: 0, e: 0, s: 0 }, me: {} }, ...m]);
-  }, []);
+    setPosts((m) => [{ id: Date.now(), kind: 'user', who: address ? short(address) : 'you', text, coinId: '', ago: 'just now', re: { r: 0, e: 0, s: 0 }, me: {} }, ...m]);
+  }, [address]);
   const react = useCallback((id: number, k: 'r' | 'e' | 's') => {
-    setMsgs((ms) => ms.map((m) => {
-      if (m.id !== id) return m;
-      const on = !m.me[k];
-      return { ...m, me: { ...m.me, [k]: on }, re: { ...m.re, [k]: m.re[k] + (on ? 1 : -1) } };
-    }));
-  }, []);
-
-  /* ---- verification ---- */
-  const [proofs, setProofs] = useState<ProofRow[]>(INITIAL_PROOFS);
-  const addProof = useCallback((coinId: string) => {
-    setProofs((p) => [{ coinId, who: short(DEMO_ADDRESS), status: 'checking', ago: 'just now', mine: true }, ...p]);
-  }, []);
+    setReacts((rs) => {
+      const m = [...posts, ...sys].find((x) => x.id === id); if (!m) return rs;
+      const cur = rs[id] ?? { me: m.me, re: m.re };
+      const on = !cur.me[k];
+      return { ...rs, [id]: { me: { ...cur.me, [k]: on }, re: { ...cur.re, [k]: cur.re[k] + (on ? 1 : -1) } } };
+    });
+  }, [posts, sys]);
 
   /* ambient callout toasts, away from the Live page */
   const ambient = useRef({ toastsOn, pathname, msgs });
   ambient.current = { toastsOn, pathname, msgs };
   useEffect(() => {
+    let seen: number | null = null;
     const id = setInterval(() => {
       const a = ambient.current;
-      if (!a.toastsOn || a.pathname === '/live') return;
-      const m = a.msgs.find((x) => x.kind === 'user');
-      if (m && Math.random() < 0.35) toast('NEW CALLOUT', `${m.who}: ${m.text.slice(0, 80)}`);
-    }, 14000);
+      const top = a.msgs[0];
+      if (!top) return;
+      if (seen === null) { seen = top.id; return; }
+      if (top.id !== seen) {
+        seen = top.id;
+        if (a.toastsOn && a.pathname !== '/live') toast('NEW CALLOUT', `${top.who}: ${top.text.slice(0, 80)}`);
+      }
+    }, 6000);
     return () => clearInterval(id);
   }, [toast]);
 
@@ -160,13 +185,20 @@ export function Providers({ children }: { children: ReactNode }) {
     return () => document.removeEventListener('keydown', onKey);
   }, [dialog, closeDialog]);
 
+  const market = useMemo(() => ({
+    loading: marketQ.isLoading,
+    error: marketQ.error ? 'Could not read Solana. The RPC did not answer.' : null,
+    ready: !!marketQ.data,
+  }), [marketQ.isLoading, marketQ.error, marketQ.data]);
+  const balance = balQ.data != null ? balQ.data / 1e9 : 0;
+
   const value: AppCtx = useMemo(() => ({
-    connected, address: DEMO_ADDRESS, balance, holdings, costBasis,
-    openWallet, disconnect, completeConnect, needWallet, needRisk, acceptRisk, validateTrade, applyTrade,
-    coins, addCoin, getCoin, msgs, postMsg, react, toastsOn, setToastsOn, proofs, addProof,
+    connected, address: address ?? '', balance, holdings, costBasis, conn, signer, pump,
+    openWallet, disconnect, needWallet, needRisk, acceptRisk,
+    coins: myCoins, getCoin, market, refresh, msgs, postMsg, react, toastsOn, setToastsOn,
     toast, showDialog, closeDialog, sfxOn, toggleSfx,
-  }), [connected, balance, holdings, costBasis, openWallet, disconnect, completeConnect, needWallet, needRisk, acceptRisk, validateTrade, applyTrade,
-    coins, addCoin, getCoin, msgs, postMsg, react, toastsOn, proofs, addProof, toast, showDialog, closeDialog, sfxOn, toggleSfx]);
+  }), [connected, address, balance, holdings, costBasis, conn, signer, pump, openWallet, disconnect, needWallet, needRisk, acceptRisk,
+    myCoins, getCoin, market, refresh, msgs, postMsg, react, toastsOn, toast, showDialog, closeDialog, sfxOn, toggleSfx]);
 
   return (
     <AppContext.Provider value={value}>

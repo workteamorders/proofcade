@@ -1,74 +1,105 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Keypair } from '@solana/web3.js';
+import { getBuyTokenAmountFromSolAmount } from '@pump-fun/pump-sdk';
 import { useApp } from '@/lib/app';
-import { type Coin } from '@/lib/data';
-import { addrOf, hex, rng } from '@/lib/util';
-import { avatar, setAvatar } from '@/lib/sprites';
+import { fmt, short } from '@/lib/util';
+import { NETWORK_NAME, IS_TEST, txUrl } from '@/lib/sol/config';
+import { BN, NATIVE_MINT, curvePreview, lamportsOf, toTokens, toSol } from '@/lib/sol/pump';
+import { launch as runLaunch, type LaunchState } from '@/lib/sol/launch';
+import { txError } from '@/lib/sol/errors';
 
 const STEPS: [string, string, string][] = [
-  ['Identity', 'Name your coin', 'Pick a name, ticker and logo. They can never be changed after launch.'],
-  ['Theorem', 'State your theorem', 'Every Sigmafun coin carries a mathematical statement and an AI rigor score.'],
-  ['Economics', 'Set the economics', 'Choose what the coin trades against, your creator fee and an optional dev buy.'],
-  ['Review', 'Review and launch', 'Check everything. Pons launch settings are permanent.'],
+  ['Identity', 'Name your coin', 'Pick a name, ticker and sprite. They can never be changed after launch.'],
+  ['Theorem', 'State your theorem', 'Every Theorem coin carries a mathematical statement, written on-chain with the launch.'],
+  ['Economics', 'Set the first buy', 'Coins trade against SOL on a pump.fun bonding curve. You can buy the first tokens yourself, optionally.'],
+  ['Review', 'Review and launch', 'Check everything. A launch cannot be undone. Your wallet will ask you to confirm twice (the theorem, then the coin), and a third time if the first buy does not fit.'],
 ];
 
-type Form = { name: string; ticker: string; logo: string | null; stmt: string; proof: string; pair: string; tax: string; buy: string };
-const EMPTY: Form = { name: '', ticker: '', logo: null, stmt: '', proof: '', pair: 'ETH', tax: '0', buy: '' };
+type Form = { name: string; ticker: string; stmt: string; buy: string };
+const EMPTY: Form = { name: '', ticker: '', stmt: '', buy: '' };
+
+const bytes = (s: string) => new TextEncoder().encode(s).length;
+const STMT_MAX = 280;
 
 function errorsFor(step: number, w: Form): Record<string, string> {
   const e: Record<string, string> = {};
   if (step === 0) {
-    if (!w.name.trim() || w.name.length > 32) e.name = 'Use 1–32 characters.';
+    if (!w.name.trim() || bytes(w.name.trim()) > 32) e.name = 'Use 1–32 characters.';
     if (!/^[A-Za-z0-9]{2,10}$/.test(w.ticker)) e.ticker = 'Use 2–10 letters or digits.';
-    if (!w.logo) e.logo = 'Choose a logo image.';
   }
-  if (step === 1 && w.stmt.trim().length < 12) e.stmt = 'State the theorem in at least 12 characters.';
-  if (step === 2) {
-    const t = Number(w.tax || 0);
-    if (!(t >= 0 && t <= 2)) e.tax = 'Pons allows 0–2%.';
-    if (w.buy && !(Number(w.buy) >= 0)) e.buy = 'Enter an amount like 0.05.';
+  if (step === 1) {
+    if (w.stmt.trim().length < 12) e.stmt = 'State the theorem in at least 12 characters.';
+    else if (bytes(w.stmt.trim()) > STMT_MAX) e.stmt = `Keep the statement under ${STMT_MAX} bytes (about ${STMT_MAX} plain characters).`;
   }
+  if (step === 2 && w.buy.trim() && !lamportsOf(w.buy)) e.buy = 'Enter an amount like 0.05.';
   return e;
 }
 
-/** The staged "launching…" dialog. Calls onDone once the demo transaction has "confirmed". */
-function LaunchProgress({ form, onDone }: { form: Form; onDone: (coin: Coin) => void }) {
+type Phase = { i: number; err?: string };
+const LSTEPS = ['Reading pump.fun launch terms', 'Waiting for your signature', 'Confirming on ' + NETWORK_NAME, 'Opening the new coin'];
+
+/** The real launch: build, simulate, sign, confirm. */
+function LaunchProgress({ form, mint, onDone }: { form: Form; mint: Keypair; onDone: (token: string, tx: string) => void }) {
   const app = useApp();
-  const steps = ['Signing in with your wallet', 'Uploading logo and theorem to IPFS', 'Waiting for your signature', 'Confirming on Robinhood Chain', 'Recording the launch on Sigmafun'];
-  const [i, setI] = useState(0);
-  const { coins, address } = app;
+  const [p, setP] = useState<Phase>({ i: 0 });
+  const [tx, setTx] = useState<string | null>(null);
+  const [run, setRun] = useState(0);
+  /* React strict mode runs effects twice in development; a wallet flow must start once per attempt. */
+  const started = useRef(-1);
+  const done = useRef<LaunchState>({}); /* what is already on-chain, so "try again" resumes */
+  const { conn, signer, refresh } = app;
   useEffect(() => {
-    if (i >= steps.length) {
-      const t = form.ticker.toUpperCase();
-      const maxOrder = coins.reduce((m, c) => Math.max(m, c.order), 0);
-      onDone({ id: 'new' + Date.now(), ticker: t, name: form.name, statement: form.stmt, rigor: 72, formal: false, native: true, mcap: 0.02, vol: 0, progress: 0.01, age: '1 min', change: 0, address: addrOf(t), creator: address, price: 0.02 / 1e9, phase: 0, order: maxOrder + 1, mine: true });
-      return;
-    }
-    const id = setTimeout(() => setI((n) => n + 1), 800);
-    return () => clearTimeout(id);
-  }, [i]); // eslint-disable-line react-hooks/exhaustive-deps
-  const filled = Math.min(20, Math.round(((i + 0.5) / steps.length) * 20));
+    if (started.current === run) return;
+    started.current = run;
+    const go = async () => {
+      if (!signer) throw new Error('Connect a wallet first.');
+      setP({ i: 0 });
+      const devBuy = form.buy.trim() ? lamportsOf(form.buy) : null;
+      const r = await runLaunch(conn, signer, { name: form.name.trim(), symbol: form.ticker.trim().toUpperCase(), statement: form.stmt.trim(), devBuy, mint, slippagePct: 10 }, (label, sig) => {
+        if (sig) setTx(sig);
+        setP({ i: sig ? 2 : /wallet/i.test(label) ? 1 : 0 });
+      }, done.current);
+      const last = done.current.created ?? r.sigs[r.sigs.length - 1];
+      setP({ i: 3 });
+      setTx(last);
+      await refresh();
+      onDone(r.mint, last);
+    };
+    go().catch((e) => setP((x) => ({ ...x, err: txError(e) })));
+  }, [run]); // eslint-disable-line react-hooks/exhaustive-deps
+  const filled = Math.min(20, Math.round(((p.i + 0.5) / LSTEPS.length) * 20));
   return (
-    <div className="dlg-body">
-      <ul className="progress">{steps.map((s, k) => <li key={s} className={k < i ? 'done' : k === i ? 'cur' : ''}><span>{k < i ? '✓' : k === i ? '▸' : ' '}</span>{s}</li>)}</ul>
-      <div className="hp" style={{ marginTop: 6 }}>{Array.from({ length: 20 }, (_, n) => <i key={n} className={n < filled ? 'on' : ''} />)}</div>
-    </div>
+    <>
+      <div className="dlg-body">
+        <ul className="progress">{LSTEPS.map((s, k) => <li key={s} className={k < p.i ? 'done' : k === p.i && !p.err ? 'cur' : ''}><span>{k < p.i ? '✓' : k === p.i ? (p.err ? '✕' : '▸') : ' '}</span>{s}</li>)}</ul>
+        <div className="hp" style={{ marginTop: 6 }}>{Array.from({ length: 20 }, (_, n) => <i key={n} className={n < filled ? 'on' : ''} />)}</div>
+        {tx && <p className="foot-note"><a href={txUrl(tx)} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit' }}>Tx {short(tx)}</a></p>}
+        {p.err && <div className="status bad">{p.err}</div>}
+      </div>
+      {p.err && (
+        <div className="dlg-foot">
+          <button className="btn ghost" onClick={app.closeDialog}>Close</button>
+          <button className="btn" onClick={() => setRun((n) => n + 1)}>Try again</button>
+        </div>
+      )}
+    </>
   );
 }
 
-function LaunchDone({ coin }: { coin: Coin }) {
+function LaunchDone({ ticker, token, tx }: { ticker: string; token: string; tx: string }) {
   const app = useApp();
   const router = useRouter();
   return (
     <>
       <div className="dlg-body">
-        <p><b>${coin.ticker}</b> is live on Pons.</p>
-        <p className="mono muted" style={{ fontSize: 13 }}>Tx 0x{hex(rng('l' + coin.id), 6)}… · Rigor scored: Σ 72</p>
+        <p><b>${ticker}</b> is live on {NETWORK_NAME}.</p>
+        <p className="mono muted" style={{ fontSize: 13 }}><a href={txUrl(tx)} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit' }}>Tx {short(tx)}</a></p>
       </div>
       <div className="dlg-foot">
         <button className="btn ghost" onClick={app.closeDialog}>OK</button>
-        <button className="btn" onClick={() => { app.closeDialog(); router.push(`/coin/${coin.id}`); }}>View coin</button>
+        <button className="btn" onClick={() => { app.closeDialog(); router.push(`/coin/${token}`); }}>View coin</button>
       </div>
     </>
   );
@@ -79,6 +110,11 @@ export function LaunchView() {
   const [step, setStep] = useState(0);
   const [w, setW] = useState<Form>(EMPTY);
   const [tried, setTried] = useState(false);
+  /* The coin's address is chosen now, so the sprite you roll is the sprite the coin keeps. */
+  const [mint, setMint] = useState<Keypair | null>(null);
+  useEffect(() => { setMint(Keypair.generate()); }, []); /* after mount: a random key during render would not match the server's HTML */
+  const mintStr = mint?.publicKey.toBase58() ?? '';
+  const g = app.pump?.global ?? null;
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setW((f) => ({ ...f, [k]: v }));
   const errs = errorsFor(step, w);
   const err = (k: string) => (tried && errs[k] ? <small className="err">{errs[k]}</small> : null);
@@ -86,26 +122,35 @@ export function LaunchView() {
 
   const next = () => { setTried(true); if (Object.keys(errs).length) return; setTried(false); setStep((s) => s + 1); };
   const back = () => { setStep((s) => Math.max(0, s - 1)); setTried(false); };
-  const pickFile = (f: File | undefined) => {
-    if (!f) return;
-    if (f.size > 1048576) { app.toast('TOO BIG', 'Use an image of 1 MB or less.'); return; }
-    const r = new FileReader(); r.onload = () => set('logo', String(r.result)); r.readAsDataURL(f);
-  };
   const launch = () => app.needWallet('A wallet is needed to launch.', () => app.needRisk(() => {
-    const snapshot = w;
+    if (!mint) return;
+    const snapshot = w, key = mint;
     app.showDialog({
       title: 'Launching…',
-      node: <LaunchProgress form={snapshot} onDone={(coin) => {
-        if (snapshot.logo) setAvatar(coin.id, snapshot.logo); else avatar(coin.id);
-        app.addCoin(coin);
-        setW(EMPTY); setStep(0); setTried(false);
-        app.toast('LEVEL CLEAR', `$${coin.ticker} launched.`);
-        app.showDialog({ title: 'LEVEL CLEAR', node: <LaunchDone coin={coin} /> });
+      node: <LaunchProgress form={snapshot} mint={key} onDone={(token, tx) => {
+        setW(EMPTY); setMint(Keypair.generate()); setStep(0); setTried(false);
+        app.toast('LEVEL CLEAR', `$${snapshot.ticker.toUpperCase()} launched.`);
+        app.showDialog({ title: 'LEVEL CLEAR', node: <LaunchDone ticker={snapshot.ticker.toUpperCase()} token={token} tx={tx} /> });
       }} />,
     });
   }));
 
-  const q = Number(w.buy) || 0;
+  const buyLamports = useMemo(() => (w.buy.trim() ? lamportsOf(w.buy) : null), [w.buy]);
+  const devBuy = useMemo(() => {
+    if (!app.pump || !buyLamports) return null;
+    try {
+      const t = getBuyTokenAmountFromSolAmount({ global: app.pump.global, feeConfig: app.pump.feeConfig, mintSupply: null, bondingCurve: null, amount: buyLamports, quoteMint: NATIVE_MINT });
+      return t.gtn(0) ? t : null;
+    } catch { return null; }
+  }, [app.pump, buyLamports]);
+  const curve = useMemo(() => {
+    if (!g) return null;
+    const pts = curvePreview(g);
+    const top = pts[pts.length - 1].price, bot = pts[0].price;
+    return pts.map((p, i) => `${i ? 'L' : 'M'}${(p.progress * 400).toFixed(1)} ${(112 - ((p.price - bot) / (top - bot || 1)) * 108).toFixed(1)}`).join(' ');
+  }, [g]);
+  const target = g ? toSol(g.initialVirtualSolReserves) : 0;
+  const paused = !!g && !g.createV2Enabled;
   return (
     <>
       <div className="eyebrow">Select player · step {step + 1} of 4</div>
@@ -126,36 +171,35 @@ export function LaunchView() {
                     <span className="label">Logo</span>
                     <div className="drop">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img className="px" src={w.logo || avatar('blank')} alt="Logo preview" width={88} height={88} />
+                      {mint ? <img className="px" src={`/api/sprite/${mintStr}`} alt="Logo preview" width={88} height={88} /> : <span style={{ width: 88, height: 88, display: 'inline-block' }} />}
                       <div style={{ display: 'grid', gap: 10 }}>
-                        <label className="btn sm ghost" htmlFor="logo" style={{ cursor: 'pointer' }}>Choose image</label>
-                        <input id="logo" className="sr" type="file" accept="image/png,image/jpeg,image/webp" onChange={(e) => pickFile(e.target.files?.[0])} />
-                        <button className="btn sm ghost" type="button" onClick={() => set('logo', avatar('roll' + Math.random()))}>Roll a sprite</button>
-                        <small className="mono muted">PNG, JPG or WebP up to 1 MB. Shown pixelated.</small>
+                        <button className="btn sm ghost" type="button" onClick={() => setMint(Keypair.generate())}>Roll a sprite</button>
+                        <small className="mono muted">The sprite is drawn from the coin&apos;s address ({mint ? short(mintStr) : '…'}), so rolling picks a new address. Custom images need a hosting service.</small>
                       </div>
                     </div>
-                    {err('logo')}
                   </div>
                 </>
               )}
               {step === 1 && (
                 <>
-                  <div className="field"><label className="label" htmlFor="ws">Theorem statement</label><textarea id="ws" value={w.stmt} onChange={(e) => set('stmt', e.target.value)} placeholder="For every n greater than 2, xⁿ + yⁿ = zⁿ has no positive integer solutions." />{err('stmt')}<small>Math notation (LaTeX) is rendered live in the full app.</small></div>
+                  <div className="field"><label className="label" htmlFor="ws">Theorem statement</label><textarea id="ws" value={w.stmt} onChange={(e) => set('stmt', e.target.value)} placeholder="For every n greater than 2, xⁿ + yⁿ = zⁿ has no positive integer solutions." />{err('stmt')}<small>{bytes(w.stmt.trim())}/{STMT_MAX} bytes. Written in the launch transaction memo.</small></div>
                   <div><span className="label">Live preview</span><div className="preview-stmt" style={{ marginTop: 8 }}>{w.stmt.trim() ? w.stmt : <span className="muted">Your statement appears here.</span>}</div></div>
-                  <div className="field"><label className="label" htmlFor="wp">Proof sketch (optional)</label><textarea id="wp" value={w.proof} onChange={(e) => set('proof', e.target.value)} placeholder="A few lines on why it holds." /></div>
                 </>
               )}
               {step === 2 && (
                 <>
                   <div className="two">
-                    <div className="field"><label className="label" htmlFor="wpair">Trades against</label><select id="wpair" value={w.pair} onChange={(e) => set('pair', e.target.value)}>{['ETH', 'USDG', 'NVDA', 'SPY'].map((p) => <option key={p}>{p}</option>)}</select></div>
-                    <div className="field"><label className="label" htmlFor="wtax">Creator fee %</label><input id="wtax" type="text" inputMode="decimal" value={w.tax} onChange={(e) => set('tax', e.target.value)} />{err('tax')}<small>Max 2%.</small></div>
+                    <div className="field"><span className="label">Trades against</span><div className="mono" style={{ padding: '12px 0' }}>SOL</div><small>On the pump.fun bonding curve.</small></div>
+                    <div className="field"><span className="label">Creator</span><div className="mono" style={{ padding: '12px 0' }}>{app.connected ? short(app.address) : 'Your wallet'}</div><small>Creator fees follow pump.fun&apos;s own rules.</small></div>
                   </div>
-                  <div className="field"><label className="label" htmlFor="wbuy">Dev buy ({w.pair}, optional)</label><input id="wbuy" type="text" inputMode="decimal" value={w.buy} onChange={(e) => set('buy', e.target.value)} placeholder="0.05" />{err('buy')}</div>
+                  <div className="field"><label className="label" htmlFor="wbuy">First buy (SOL, optional)</label><input id="wbuy" type="text" inputMode="decimal" value={w.buy} onChange={(e) => set('buy', e.target.value)} placeholder="0.05" />{err('buy')}{devBuy && <small>≈ {fmt(toTokens(devBuy))} ${w.ticker.toUpperCase() || 'TOKENS'} at the opening price.</small>}</div>
                   <div><span className="label">Bonding curve preview</span>
                     <div className="curve crt" style={{ marginTop: 8 }}>
-                      <svg viewBox="0 0 400 120" preserveAspectRatio="none" aria-hidden="true"><path d="M0 112 C 120 108, 220 90, 300 52 S 380 8, 400 4" fill="none" stroke="#3de8a0" strokeWidth="3" /><path d="M0 112 C 120 108, 220 90, 300 52 S 380 8, 400 4 V120 H0Z" fill="rgba(61,232,160,.12)" /></svg>
+                      <svg viewBox="0 0 400 120" preserveAspectRatio="none" aria-hidden="true">
+                        {curve ? <><path d={curve} fill="none" stroke="#3de8a0" strokeWidth="3" /><path d={`${curve} V120 H0Z`} fill="rgba(61,232,160,.12)" /></> : null}
+                      </svg>
                     </div>
+                    <small className="muted">{g ? 'Price rises as tokens are bought, then the coin graduates to PumpSwap when the curve is full.' : 'Reading the launch terms…'}</small>
                   </div>
                 </>
               )}
@@ -163,8 +207,15 @@ export function LaunchView() {
                 <>
                   <div className="review">
                     <div><dt>Name</dt><dd>{w.name}</dd></div><div><dt>Ticker</dt><dd>${w.ticker.toUpperCase()}</dd></div><div><dt>Theorem</dt><dd>{w.stmt}</dd></div>
-                    <div><dt>Pair</dt><dd>{w.pair}</dd></div><div><dt>Creator fee</dt><dd>{w.tax || '0'}%</dd></div><div><dt>Dev buy</dt><dd>{q ? `${q} ${w.pair}` : 'None'}</dd></div><div><dt>Rigor score</dt><dd>Scored after you launch</dd></div>
+                    <div><dt>Address</dt><dd className="mono">{mint ? short(mintStr) : '…'}</dd></div>
+                    <div><dt>Pair</dt><dd>SOL (pump.fun curve)</dd></div>
+                    <div><dt>First buy</dt><dd>{buyLamports ? `${w.buy} SOL` : 'None'}</dd></div>
+                    <div><dt>Network fees</dt><dd>A few cents of SOL, plus rent for the new accounts</dd></div>
+                    <div><dt>Rigor score</dt><dd>Not scored (needs the Theorem service)</dd></div>
                   </div>
+                  {app.market.error && <div className="status bad">Could not read pump.fun from {NETWORK_NAME}. Try again in a moment.</div>}
+                  {paused && <div className="status bad">pump.fun has paused new launches on this network.</div>}
+                  {IS_TEST && <div className="status">Devnet: coins here are for testing and have no value. Use a devnet wallet with free SOL.</div>}
                   {!app.connected && <div className="status">Connect a wallet to launch. Everything above is saved.</div>}
                 </>
               )}
@@ -172,7 +223,7 @@ export function LaunchView() {
           </div>
           <div className="wiz-foot">
             <button className="btn ghost" onClick={back} disabled={step === 0}>← Back</button>
-            {step === 3 ? <button className="btn" onClick={launch}>{app.connected ? '▶ Launch' : 'Insert coin · connect wallet'}</button> : <button className="btn" onClick={next}>Next →</button>}
+            {step === 3 ? <button className="btn" onClick={launch} disabled={!g || paused || !mint}>{app.connected ? '▶ Launch' : 'Insert coin · connect wallet'}</button> : <button className="btn" onClick={next}>Next →</button>}
           </div>
         </div>
       </div>

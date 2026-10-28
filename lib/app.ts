@@ -1,41 +1,46 @@
 'use client';
 import { createContext, useContext, type ReactNode } from 'react';
-import type { ChatMsg, Coin, ProofRow } from './data';
+import type { ChatMsg, Coin } from './data';
+import type { Connection } from '@solana/web3.js';
+import type { Ctx } from './sol/pump';
+import type { Wallet } from './sol/tx';
 
 export type DialogSpec = { title: string; node: ReactNode };
 
-export type TradeCheck = { ok: true } | { ok: false; msg: string };
-
 export type AppCtx = {
-  /* wallet (mock: swap this block for wagmi/RainbowKit in the real app) */
+  /* wallet (Solana wallet adapter) */
   connected: boolean;
   address: string;
+  /** SOL balance. */
   balance: number;
+  /** Token balances per coin id, from the chain. */
   holdings: Record<string, number>;
+  /** Average SOL paid per token, from the wallet's recent buys. */
   costBasis: Record<string, number>;
+  /** RPC connection and the wallet's signer, for building and sending transactions. */
+  conn: Connection;
+  signer: Wallet | null;
+  /** pump.fun global settings and fee schedule, for quotes. */
+  pump: Ctx | null;
   openWallet: () => void;
   disconnect: () => void;
-  completeConnect: (walletName: string) => void;
   /** Run fn once a wallet is connected. Opens the connect dialog if needed. */
   needWallet: (reason: string, fn: () => void) => void;
   /** Run fn once the one-time risk notice has been accepted. */
   needRisk: (fn: () => void) => void;
   acceptRisk: () => void;
-  validateTrade: (coin: Coin, side: 'buy' | 'sell', amount: number) => TradeCheck;
-  applyTrade: (coin: Coin, side: 'buy' | 'sell', amountIn: number, amountOut: number) => void;
-  /* market */
+  /* market, read from the chain */
   coins: Coin[];
-  addCoin: (c: Coin) => void;
   getCoin: (id: string) => Coin | undefined;
-  /* chat */
+  market: { loading: boolean; error: string | null; ready: boolean };
+  /** Re-read the chain now (after a transaction). */
+  refresh: () => Promise<void>;
+  /* callouts: on-chain activity plus posts kept in this browser */
   msgs: ChatMsg[];
   postMsg: (text: string) => void;
   react: (id: number, k: 'r' | 'e' | 's') => void;
   toastsOn: boolean;
   setToastsOn: (v: boolean) => void;
-  /* verification */
-  proofs: ProofRow[];
-  addProof: (coinId: string) => void;
   /* ui */
   toast: (title: string, text: string) => void;
   showDialog: (d: DialogSpec) => void;

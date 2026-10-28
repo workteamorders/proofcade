@@ -15,13 +15,13 @@ export function fmt(v: number): string {
   return `${sg}0.0${String(z).split('').map((x) => SUB[+x]).join('')}${String(d).replace(/0+$/, '')}`;
 }
 
-export const eth = (v: number) => `${fmt(v)} ETH`;
+export const sol = (v: number) => `${fmt(v)} SOL`;
 
-/** Sample ETH/USD rate used to show market caps in dollars. Replace with a live price feed in the real app. */
-export const ETH_USD = 3000;
-/** Market cap (given in ETH) as a compact dollar amount, e.g. $12.6K or $1.2M. */
-export const usd = (ethValue: number) => {
-  const d = ethValue * ETH_USD;
+/** Sample SOL/USD rate used to show market caps in dollars. Set NEXT_PUBLIC_SOL_USD, or wire a price feed, for production. */
+export const SOL_USD = Number(process.env.NEXT_PUBLIC_SOL_USD || 150);
+/** Market cap (given in SOL) as a compact dollar amount, e.g. $12.6K or $1.2M. */
+export const usd = (solValue: number) => {
+  const d = solValue * SOL_USD;
   if (d >= 1000) return '$' + d.toLocaleString('en-US', { notation: 'compact', maximumFractionDigits: 1 });
   return '$' + d.toLocaleString('en-US', { maximumFractionDigits: 0 });
 };

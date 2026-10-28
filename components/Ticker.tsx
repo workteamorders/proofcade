@@ -1,18 +1,16 @@
-const ITEMS = [
-  'NEW LAUNCH <b>$ZETA</b>',
-  'SnugChalkWalrus bought <b>1.8 ETH</b> of <b>$EULER</b>',
-  '<b>$SWITCH</b> graduated to Uniswap V4',
-  'FORMAL ✓ <b>$PRIME</b> verified',
-  'RareSandAntler sold <b>0.4 ETH</b> of <b>$NOETHER</b>',
-  'NEW LAUNCH <b>$ZENO</b>',
-  'LunarFogWeasel bought <b>0.9 ETH</b> of <b>$GAUSS</b>',
-];
+'use client';
+import { useApp } from '@/lib/app';
+
+const bold = (t: string) => t.split(/(\$[A-Z0-9]+|[\d.]+ SOL)/g).map((x, i) => (i % 2 ? <b key={i}>{x}</b> : x));
 
 export function Ticker() {
-  const row = ITEMS.map((t, i) => <span key={i} dangerouslySetInnerHTML={{ __html: t }} />);
+  const app = useApp();
+  const items = app.msgs.filter((m) => m.kind === 'sys').slice(0, 8).map((m) => m.text);
+  const row = items.length ? items : ['WAITING FOR THE FIRST LAUNCH ON SOLANA', 'LAUNCH A COIN TO START THE BOARD'];
+  const rep = [...row, ...row];
   return (
     <div className="ticker" aria-hidden="true">
-      <div className="ticker-in">{row}{ITEMS.map((t, i) => <span key={'b' + i} dangerouslySetInnerHTML={{ __html: t }} />)}</div>
+      <div className="ticker-in">{rep.map((t, i) => <span key={i}>{bold(t)}</span>)}</div>
     </div>
   );
 }

@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { useEffect, useRef } from 'react';
 import { PHASE, type Coin, type ChatMsg } from '@/lib/data';
-import { eth, usd } from '@/lib/util';
+import { sol, usd } from '@/lib/util';
 import { coinCanvas } from '@/lib/sprites';
 import { useApp } from '@/lib/app';
 import { Px } from './Px';
@@ -38,12 +38,11 @@ export function CoinCard({ c, rank, vol }: { c: Coin; rank?: number; vol?: boole
         <span className="cart-names"><b>${c.ticker}</b><span>{c.name}</span></span>
       </span>
       <span className="cart-badges">
-        {c.native ? <RigorBadge r={c.rigor} /> : <span className="badge">PONS</span>}
-        {c.formal && <FormalBadge />}
+        {c.native ? <RigorBadge r={c.rigor} /> : <span className="badge">PUMP</span>}
       </span>
       <span className="cart-stmt">{c.native ? c.statement : c.blurb}</span>
       <span className="cart-row">
-        <span>{vol ? '24h vol' : 'MC'} <b>{vol ? eth(c.vol) : usd(c.mcap)}</b></span>
+        <span>{vol ? 'Raised' : 'MC'} <b>{vol ? sol(c.raised) : usd(c.mcap)}</b></span>
         <span style={{ color: changeColor(c.change) }}>{c.change >= 0 ? '▲' : '▼'} {Math.abs(c.change).toFixed(1)}%</span>
       </span>
       <HpBar p={c.progress} />
@@ -60,7 +59,7 @@ export function GateNote() {
   return (
     <div className="gate">
       <span className={`led ${app.connected ? '' : 'off'}`} />
-      <span>A wallet is needed to launch, trade or submit proofs. Browsing is open.</span>
+      <span>A wallet is needed to launch or trade. Browsing is open.</span>
     </div>
   );
 }
@@ -87,7 +86,7 @@ export function Msg({ m }: { m: ChatMsg }) {
         <div className="msg-top">
           <b>{m.who}</b>
           {c && <Link href={`/coin/${c.id}`} style={{ color: 'var(--ink)' }}>${c.ticker}</Link>}
-          <span>{m.ago} min ago</span>
+          <span>{m.ago}</span>
         </div>
         <p>{m.text}</p>
         {m.kind === 'user' && (

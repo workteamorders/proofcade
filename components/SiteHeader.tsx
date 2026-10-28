@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useApp } from '@/lib/app';
 import { coinCanvas } from '@/lib/sprites';
 import { fmt, short } from '@/lib/util';
+import { IS_TEST } from '@/lib/sol/config';
 
 export const NAV: { href: string; label: string; tag?: string }[] = [
   { href: '/', label: 'Home' },
@@ -30,8 +31,8 @@ export function SiteHeader() {
   return (
     <header className="top">
       <div className="wrap">
-        <Link className="logo" href="/" aria-label="Sigmafun home">
-          <canvas ref={logo} width={16} height={16} aria-hidden="true" /><span>SIGMA<i>FUN</i></span>
+        <Link className="logo" href="/" aria-label="Theorem home">
+          <canvas ref={logo} width={16} height={16} aria-hidden="true" /><span>THEOREM</span>
         </Link>
         <nav className="nav" aria-label="Main">
           {NAV.map((n) => (
@@ -41,12 +42,12 @@ export function SiteHeader() {
           ))}
         </nav>
         <div style={{ flex: 1 }} />
-        <span className="chip hide-m"><span className={`led ${app.connected ? '' : 'off'}`} />ROBINHOOD</span>
+        <span className="chip hide-m"><span className={`led ${app.connected ? '' : 'off'}`} />{IS_TEST ? 'DEVNET' : 'SOLANA'}</span>
         <button className="iconbtn" type="button" aria-pressed={app.sfxOn} aria-label="Toggle sound effects" title="Sound effects" onClick={app.toggleSfx}>♪</button>
         {/* The wallet control is pinned top right on every page. */}
         <button className={`wallet ${app.connected ? 'on' : ''}`} type="button" aria-label={app.connected ? 'Wallet account' : 'Connect wallet'} onClick={app.openWallet}>
           <span className="slot" />
-          {app.connected ? (<><span>{short(app.address)}</span><span className="long mono">· {fmt(app.balance)} ETH</span></>) : (<><span className="long">Insert coin ·</span><span>Connect</span></>)}
+          {app.connected ? (<><span>{short(app.address)}</span><span className="long mono">· {fmt(app.balance)} SOL</span></>) : (<><span className="long">Insert coin ·</span><span>Connect</span></>)}
         </button>
         <button className="burger" type="button" aria-label="Menu" aria-expanded={open} aria-controls="menu" onClick={() => setOpen((o) => !o)}><span /><span /><span /></button>
       </div>

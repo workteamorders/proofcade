@@ -63,7 +63,7 @@ export function ArcadeView() {
 
   return (
     <>
-      <div className="eyebrow">Sigmafun · {GAME_ORDER.length} cabinets</div>
+      <div className="eyebrow">Theorem · {GAME_ORDER.length} cabinets</div>
       <h1 style={{ margin: '14px 0 14px' }}>Time for a little downtime.</h1>
       <p className="lead" style={{ marginBottom: 26 }}>Six games, no wallet needed. Move your cursor, click anything: the whole room reacts. A wallet only unlocks the ranked board.</p>
       <div className="cabs">

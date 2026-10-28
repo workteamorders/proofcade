@@ -1,15 +1,16 @@
 import Link from 'next/link';
+import { IS_TEST, SOL_USD_NOTE } from '@/lib/sol/footer';
 
 export function SiteFooter() {
   return (
     <footer>
       <div className="wrap">
         <div className="cols">
-          <div><b style={{ color: '#fff' }}>SIGMA<span style={{ color: 'var(--coin)' }}>FUN</span></b><br />Theorem-backed coins on Robinhood Chain.<br />Routed through Pons.</div>
+          <div><b style={{ color: '#fff' }}>THEOREM</b><br />Theorem-backed coins on Solana.<br />Trades run on the pump.fun program.</div>
           <div><Link href="/explore">Explore</Link><Link href="/launch">Launch</Link><Link href="/arcade">Arcade</Link></div>
-          <div>Rigor scores are AI estimates, not proof checks.<br />Pons V2 is unaudited software. Not financial advice.<br />Market caps in USD use a sample rate of 1 ETH = $3,000.</div>
+          <div>Rigor scores, when they exist, are AI estimates, not proof checks.<br />pump.fun is third-party software. Not financial advice.<br />{SOL_USD_NOTE}</div>
         </div>
-        <div className="demo">Demo build. Coins, prices, trades and the wallet connection are sample data. Nothing here touches a chain.</div>
+        {IS_TEST && <div className="demo">Devnet build. Coins and SOL here have no real value. Switch the cluster to mainnet-beta to go live.</div>}
       </div>
     </footer>
   );

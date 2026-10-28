@@ -1,41 +1,66 @@
 'use client';
 import Link from 'next/link';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { PublicKey } from '@solana/web3.js';
 import { useApp } from '@/lib/app';
 import { PHASE, type Coin } from '@/lib/data';
-import { addrOf, eth, fmt, hex, rng, short, usd } from '@/lib/util';
-import { FormalBadge, HpBar, Msg, RigorBadge } from '../ui';
+import { sol, fmt, short, usd } from '@/lib/util';
+import { addressUrl, tokenUrl, txUrl } from '@/lib/sol/config';
+import { ago, readTrades, type Trade } from '@/lib/sol/market';
+import { BN, PUMP_SDK, bondingCurvePda, lamportsOf, quoteBuy, quoteSell, rawOf, toSol, toTokens } from '@/lib/sol/pump';
+import * as trade from '@/lib/sol/trade';
+import { txError } from '@/lib/sol/errors';
+import { HpBar, Msg, RigorBadge } from '../ui';
 import { Px } from '../Px';
-import { useSubmitProof } from '../SubmitProof';
 
 type Interval = '1m' | '5m' | '15m' | '1h' | '1d';
 const INTERVALS: Interval[] = ['1m', '5m', '15m', '1h', '1d'];
+const SECONDS: Record<Interval, number> = { '1m': 60, '5m': 300, '15m': 900, '1h': 3600, '1d': 86400 };
 const MONO = 'JetBrains Mono, monospace';
+/** This coin's latest trades, newest first. */
+function useCoinTrades(c: Coin) {
+  const app = useApp();
+  const q = useQuery({
+    queryKey: ['trades', c.id],
+    refetchInterval: 15_000,
+    queryFn: () => readTrades(app.conn, c),
+  });
+  return { trades: q.data ?? [], loading: q.isLoading, error: q.isError };
+}
 
 /* ---------------- chart ---------------- */
-function Chart({ c, iv }: { c: Coin; iv: Interval }) {
+function Chart({ c, iv, trades }: { c: Coin; iv: Interval; trades: ReturnType<typeof useCoinTrades> }) {
   const g = useMemo(() => {
-    const r = rng(c.id + iv), N = 56, W = 800, H = 280, L = 8, R = 70, T = 18, B = 26;
-    const vol = { '1m': 0.02, '5m': 0.035, '15m': 0.05, '1h': 0.07, '1d': 0.12 }[iv];
-    const drift = c.change >= 0 ? 0.004 : -0.003;
-    let p = 1;
-    const ds: [number, number, number, number][] = [];
-    for (let i = 0; i < N; i++) {
-      const o = p, cl = Math.max(0.15, o * (1 + (r() - 0.47) * vol + drift));
-      ds.push([o, Math.max(o, cl) * (1 + r() * vol * 0.5), Math.min(o, cl) * (1 - r() * vol * 0.5), cl]); p = cl;
+    const step = SECONDS[iv];
+    const pts: [number, number][] = [[c.created, c.launchPrice], ...trades.trades.flatMap((t): [number, number][] => (t.time ? [[t.time, t.price]] : []))];
+    pts.sort((a, b) => a[0] - b[0]);
+    const buckets = new Map<number, [number, number, number, number]>();
+    let prev = pts[0][1];
+    for (const [t, p] of pts) {
+      const k = Math.floor(t / step);
+      const b = buckets.get(k);
+      if (!b) buckets.set(k, [prev, Math.max(prev, p), Math.min(prev, p), p]);
+      else { b[1] = Math.max(b[1], p); b[2] = Math.min(b[2], p); b[3] = p; }
+      prev = p;
     }
+    const ds = [...buckets.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => v).slice(-56);
+    if (ds.length < 1 || trades.trades.length < 1) return null;
+    const W = 800, H = 280, L = 8, R = 70, T = 18, B = 26;
     const min = Math.min(...ds.map((d) => d[2])), max = Math.max(...ds.map((d) => d[1]));
-    const y = (v: number) => T + (1 - (v - min) / (max - min)) * (H - T - B);
-    const k = (W - L - R) / N, last = ds[N - 1][3], base = c.price / last;
-    return { ds, y, k, W, H, L, R, min, max, base, last };
-  }, [c.id, c.change, c.price, iv]);
-  const { ds, y, k, W, H, L, R, min, max, base, last } = g;
-  const ly = y(last);
+    const span = max - min || max * 0.1 || 1;
+    const y = (v: number) => T + (1 - (v - (min - span * 0.05)) / (span * 1.1)) * (H - T - B);
+    return { ds, y, k: (W - L - R) / Math.max(ds.length, 12), W, H, L, R, min, max };
+  }, [c.created, c.launchPrice, trades.trades, iv]);
+
+  if (!g) return <div className="chart-empty muted" style={{ padding: '60px 12px', textAlign: 'center' }}>{trades.loading ? 'Loading candles…' : trades.error ? 'Could not read trades from Solana.' : 'No trades yet. The first buy draws the first candle.'}</div>;
+  const { ds, y, k, W, H, L, R, min, max } = g;
+  const ly = y(c.price);
   return (
     <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label={`Candle chart of ${c.ticker} price, ${iv}`}>
       {[0, 1, 2, 3, 4].map((i) => {
         const v = min + ((max - min) * i) / 4, yy = y(v);
-        return (<g key={i}><line x1={L} x2={W - R} y1={yy} y2={yy} stroke="#1b3f94" strokeDasharray="2 5" /><text x={W - R + 8} y={yy + 4} fill="#7fd6ff" fontSize="11" fontFamily={MONO}>{fmt(v * base)}</text></g>);
+        return (<g key={i}><line x1={L} x2={W - R} y1={yy} y2={yy} stroke="#1b3f94" strokeDasharray="2 5" /><text x={W - R + 8} y={yy + 4} fill="#7fd6ff" fontSize="11" fontFamily={MONO}>{fmt(v)}</text></g>);
       })}
       {ds.map(([o, h, l, cl], i) => {
         const x = L + i * k + k / 2, col = cl >= o ? '#3de8a0' : '#ff5577';
@@ -50,21 +75,23 @@ function Chart({ c, iv }: { c: Coin; iv: Interval }) {
 
 /* ---------------- trade ---------------- */
 type Side = 'buy' | 'sell';
-type Quote = { a: number; out: number; min: number; impact: number; fee: number; recv: string; minS: string };
+type TradeState = { busy?: boolean; label?: string; ok?: boolean; err?: boolean; msg?: string; tx?: string };
 
-function quoteFor(c: Coin, side: Side, amt: string, slipStr: string): Quote | null {
-  const a = parseFloat(amt.replace(',', '.'));
-  if (!(a > 0)) return null;
-  const slip = Math.max(0, 1 - (parseFloat(slipStr) || 5) / 100);
-  if (side === 'buy') {
-    const fee = a * 0.01, out = (a - fee) / c.price;
-    return { a, out, min: out * slip, impact: (a / (c.mcap + a)) * 200, fee, recv: `${fmt(out)} $${c.ticker}`, minS: `${fmt(out * slip)} $${c.ticker}` };
-  }
-  const out = a * c.price * 0.99;
-  return { a, out, min: out * slip, impact: ((a * c.price) / (c.mcap + a * c.price)) * 200, fee: a * c.price * 0.01, recv: `${fmt(out)} ETH`, minS: `${fmt(out * slip)} ETH` };
+/** The curve account, re-read every few seconds so quotes follow the price. */
+function useCurve(c: Coin) {
+  const app = useApp();
+  return useQuery({
+    queryKey: ['curve', c.id],
+    enabled: c.phase === 0,
+    refetchInterval: 8_000,
+    queryFn: async () => {
+      const info = await app.conn.getAccountInfo(bondingCurvePda(c.id), 'confirmed');
+      const curve = info ? PUMP_SDK.decodeBondingCurveNullable(info) : null;
+      if (!curve) throw new Error('curve not found');
+      return curve;
+    },
+  });
 }
-
-type TradeState = { busy?: boolean; label?: string; ok?: boolean; err?: boolean; msg?: string };
 
 function TradePanel({ c }: { c: Coin }) {
   const app = useApp();
@@ -72,40 +99,47 @@ function TradePanel({ c }: { c: Coin }) {
   const [amt, setAmt] = useState('');
   const [slip, setSlip] = useState('5');
   const [tr, setTr] = useState<TradeState | null>(null);
-  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
-  useEffect(() => () => timers.current.forEach(clearTimeout), []);
+  const curveQ = useCurve(c);
+  const curve = curveQ.data;
 
-  if (c.phase > 0) {
+  if (c.phase > 0 || curve?.complete) {
     return (
       <div className="trade-body">
-        <div className="status">${c.ticker} has finished its curve. Its Uniswap V4 pool is being seeded, so curve trading is closed.</div>
-        <p className="foot-note">Powered by Pons · Pons V2 is unaudited</p>
+        <div className="status">${c.ticker} has finished its curve and graduated. Curve trading is closed.</div>
+        <p className="foot-note">Powered by pump.fun · third-party software</p>
       </div>
     );
   }
-  const buy = side === 'buy', held = app.holdings[c.id] || 0, unit = buy ? 'ETH' : '$' + c.ticker;
-  const q = quoteFor(c, side, amt, slip);
+  const buy = side === 'buy', unit = buy ? 'SOL' : '$' + c.ticker;
+  const held = app.holdings[c.id] || 0;
+  const slipPct = Math.min(50, Math.max(0.1, parseFloat(slip) || 5));
+  const input = buy ? lamportsOf(amt) : rawOf(amt);
+  const q = curve && app.pump && input
+    ? (buy ? quoteBuy(app.pump, curve, input) : quoteSell(app.pump, curve, input))
+    : null;
+  const recvText = q ? ('tokens' in q ? `${fmt(toTokens(q.tokens))} $${c.ticker}` : `${fmt(toSol(q.lamports))} SOL`) : '';
+  const minText = q ? ('tokens' in q ? `${fmt(toTokens(q.tokens) * (1 - slipPct / 100))} $${c.ticker}` : `${fmt(toSol(q.lamports) * (1 - slipPct / 100))} SOL`) : '';
   const label = tr?.busy ? tr.label : !app.connected ? 'Insert coin · connect wallet' : `${buy ? 'Buy' : 'Sell'} $${c.ticker}`;
 
-  const run = (qq: Quote) => {
-    const check = app.validateTrade(c, side, qq.a);
-    if (!check.ok) { setTr({ err: true, msg: check.msg }); return; }
-    const seq: [string, number][] = [['Approve in your wallet…', 700], ['Confirming approval…', 900], ['Confirm in your wallet…', 700], ['Confirming on Robinhood Chain…', 1100]];
-    let i = 0;
-    const step = () => {
-      if (i < seq.length) { setTr({ busy: true, label: seq[i][0] }); timers.current.push(setTimeout(step, seq[i][1])); i++; return; }
-      app.applyTrade(c, side, qq.a, qq.out);
-      const tx = `0x${hex(rng('tx' + Date.now()), 6)}…`;
-      setTr({ ok: true, msg: buy ? `Bought ${fmt(qq.out)} $${c.ticker}. Tx ${tx}` : `Sold for ${fmt(qq.out)} ETH. Tx ${tx}` });
+  const run = async () => {
+    const w = app.signer; if (!w) return;
+    const amount = buy ? lamportsOf(amt) : rawOf(amt);
+    if (!amount) { setTr({ err: true, msg: 'Enter an amount first.' }); return; }
+    try {
+      if (!buy && amount.gt(new BN(Math.round(held * 1e6)))) throw new Error(`You only hold ${fmt(held)} $${c.ticker}.`);
+      const step = (label: string, sig?: string) => setTr({ busy: true, label, tx: sig });
+      const mint = new PublicKey(c.id);
+      const r = buy ? await trade.buy(app.conn, w, mint, amount, slipPct, step) : await trade.sell(app.conn, w, mint, amount, slipPct, step);
+      const out = 'tokens' in r ? `${fmt(toTokens(r.tokens))} $${c.ticker}` : `${fmt(toSol(r.lamports))} SOL`;
+      setTr({ ok: true, tx: r.sig, msg: buy ? `Bought about ${out}.` : `Sold for about ${out}.` });
       setAmt('');
-      app.toast('LEVEL UP', buy ? `+${fmt(qq.out)} $${c.ticker}` : `+${fmt(qq.out)} ETH`);
-    };
-    step();
+      app.toast('LEVEL UP', `+${out}`);
+      void app.refresh();
+    } catch (e) { setTr({ err: true, msg: txError(e) }); }
   };
   const onTrade = () => app.needWallet('A wallet is needed to trade.', () => {
-    const qq = quoteFor(c, side, amt, slip);
-    if (!qq) { setTr({ err: true, msg: 'Enter an amount first.' }); return; }
-    app.needRisk(() => run(qq));
+    if (!(buy ? lamportsOf(amt) : rawOf(amt))) { setTr({ err: true, msg: 'Enter an amount first.' }); return; }
+    app.needRisk(() => { void run(); });
   });
 
   return (
@@ -118,77 +152,77 @@ function TradePanel({ c }: { c: Coin }) {
         <div className="field">
           <div style={{ display: 'flex', justifyContent: 'space-between' }} className="label">
             <label htmlFor="amt">Amount</label>
-            <span>{app.connected ? 'Balance ' + (buy ? app.balance.toFixed(3) + ' ETH' : fmt(held)) : 'Wallet not connected'}</span>
+            <span>{app.connected ? 'Balance ' + (buy ? app.balance.toFixed(4) + ' SOL' : fmt(held)) : 'Wallet not connected'}</span>
           </div>
           <div className="amt"><input id="amt" type="text" inputMode="decimal" autoComplete="off" placeholder="0" value={amt} onChange={(e) => setAmt(e.target.value)} /><span className="unit">{unit}</span></div>
         </div>
         <div className="presets">
           {buy
             ? ['0.01', '0.05', '0.1', '0.5'].map((v) => <button key={v} onClick={() => setAmt(v)}>{v}</button>)
-            : [25, 50, 75, 100].map((v) => <button key={v} onClick={() => setAmt(String(Math.floor((held * v) / 100)))}>{v === 100 ? 'Max' : v + '%'}</button>)}
+            : [25, 50, 75, 100].map((v) => <button key={v} onClick={() => setAmt(String(Math.floor((held * v) / 100 * 1e6) / 1e6))}>{v === 100 ? 'Max' : v + '%'}</button>)}
         </div>
         {q && (
           <dl className="quote">
-            <div><dt>You receive</dt><dd>≈ {q.recv}</dd></div>
-            <div><dt>Minimum</dt><dd>{q.minS}</dd></div>
-            <div><dt>Price impact</dt><dd className={q.impact > 5 ? 'warn' : ''}>{q.impact.toFixed(2)}%</dd></div>
-            <div><dt>Trade fee (1%)</dt><dd>{fmt(q.fee)} ETH</dd></div>
+            <div><dt>You receive</dt><dd>≈ {recvText}</dd></div>
+            <div><dt>Minimum</dt><dd>{minText}</dd></div>
+            <div><dt>Price impact (with fees)</dt><dd className={q.impact > 5 ? 'warn' : ''}>{q.impact.toFixed(2)}%</dd></div>
           </dl>
         )}
-        <label className="slip">Slippage <input type="number" min={0.5} max={20} step={0.5} value={slip} onChange={(e) => setSlip(e.target.value)} aria-label="Slippage percent" /> %</label>
-        <button className={`btn ${buy ? 'buy' : 'sell'} wide`} onClick={onTrade} disabled={!!tr?.busy}>{label}</button>
-        {tr?.msg && <div className={`status ${tr.ok ? 'ok' : tr.err ? 'bad' : ''}`}>{tr.msg}</div>}
-        <p className="foot-note">Powered by Pons · Pons V2 is unaudited</p>
+        {input && curve && !q && <div className="status bad">That amount is too small or too large for this curve.</div>}
+        {curveQ.isError && <div className="status bad">Could not read this curve from Solana. Try again in a moment.</div>}
+        <label className="slip">Slippage <input type="number" min={0.5} max={50} step={0.5} value={slip} onChange={(e) => setSlip(e.target.value)} aria-label="Slippage percent" /> %</label>
+        <button className={`btn ${buy ? 'buy' : 'sell'} wide`} onClick={onTrade} disabled={!!tr?.busy || (app.connected && !curve)}>{label}</button>
+        {tr?.msg && <div className={`status ${tr.ok ? 'ok' : tr.err ? 'bad' : ''}`}>{tr.msg}{tr.tx && <> <a href={txUrl(tr.tx)} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'underline' }}>View tx {short(tr.tx)}</a></>}</div>}
+        {tr?.busy && tr.tx && <div className="status"><a href={txUrl(tr.tx)} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'underline' }}>Tx {short(tr.tx)}</a></div>}
+        <p className="foot-note">Powered by pump.fun · third-party software</p>
       </div>
     </>
   );
 }
 
 /* ---------------- tabs ---------------- */
-function Trades({ c }: { c: Coin }) {
-  const rows = useMemo(() => {
-    const r = rng(c.id + 'tr');
-    return Array.from({ length: 12 }, (_, i) => {
-      const b = r() > 0.45;
-      return { b, who: short(addrOf(c.id + i)), eth: (r() * 1.4 + 0.01).toFixed(3), price: fmt(c.price * (1 + (r() - 0.5) * 0.05)), age: Math.floor(r() * 50) + i * 4 + 1 };
-    });
-  }, [c.id, c.price]);
+function Trades({ c, trades }: { c: Coin; trades: ReturnType<typeof useCoinTrades> }) {
+  const rows = trades.trades.slice(0, 20);
+  if (!rows.length) return <p className="muted">{trades.loading ? 'Reading trades…' : `No trades yet for $${c.ticker}.`}</p>;
   return (
     <div className="scroll-x">
       <table className="list">
-        <thead><tr><th>Side</th><th>Trader</th><th className="r">ETH</th><th className="r">Price</th><th className="r">Age</th></tr></thead>
-        <tbody>{rows.map((t, i) => <tr key={i}><td className={t.b ? 'buy-t' : 'sell-t'}>{t.b ? 'BUY' : 'SELL'}</td><td>{t.who}</td><td className="r">{t.eth}</td><td className="r">{t.price}</td><td className="r">{t.age} min ago</td></tr>)}</tbody>
+        <thead><tr><th>Side</th><th>Trader</th><th className="r">SOL</th><th className="r">Price</th><th className="r">When</th></tr></thead>
+        <tbody>{rows.map((t: Trade) => (
+          <tr key={t.sig}>
+            <td className={t.side === 'buy' ? 'buy-t' : 'sell-t'}>{t.side.toUpperCase()}</td>
+            <td><a href={addressUrl(t.trader)} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit' }}>{short(t.trader)}</a></td>
+            <td className="r">{fmt(t.sol)}</td><td className="r">{fmt(t.price)}</td>
+            <td className="r"><a href={txUrl(t.sig)} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit' }}>{t.time ? `${ago(t.time)} ago` : 'view'}</a></td>
+          </tr>
+        ))}</tbody>
       </table>
     </div>
   );
 }
 
-function TabPanel({ c, tab }: { c: Coin; tab: string }) {
+function TabPanel({ c, tab, trades }: { c: Coin; tab: string; trades: ReturnType<typeof useCoinTrades> }) {
   const app = useApp();
-  const submit = useSubmitProof();
-  if (tab === 'trades') return <Trades c={c} />;
+  if (tab === 'trades') return <Trades c={c} trades={trades} />;
   if (tab === 'callouts') {
     const m = app.msgs.filter((x) => x.coinId === c.id);
     return m.length ? <div className="feed">{m.map((x) => <Msg key={x.id} m={x} />)}</div> : <p className="muted">No callouts for this coin yet.</p>;
   }
-  if (tab === 'theorem') {
-    if (!c.native) return (<><p className="muted">This coin wasn&apos;t launched on Sigmafun, so it carries no theorem. Its description:</p><p>{c.blurb}</p></>);
+  if (tab === 'contract') {
     return (
-      <>
-        <div className="theorem screen" style={{ boxShadow: 'none', borderWidth: '0 0 0 10px', borderColor: 'var(--coin)' }}><small>Theorem</small>{c.statement}</div>
-        <p className="muted">Rigor <RigorBadge r={c.rigor} /> {c.formal ? <><FormalBadge /> formally verified: a Lean 4 proof was checked by the kernel and reviewed.</> : '. An AI estimate, not a proof check.'}</p>
-        {!c.formal && <p><button className="btn sm" onClick={() => submit(c.id)}>⚡ Submit for formal verification</button> <span className="muted">A Lean proof that passes earns Σ 100, FORMAL ✓ and a reward.</span></p>}
-      </>
+      <dl className="review" style={{ margin: 0 }}>
+        <div><dt>Mint</dt><dd className="mono"><a href={tokenUrl(c.address)} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit' }}>{c.address}</a></dd></div>
+        <div><dt>Bonding curve</dt><dd className="mono"><a href={addressUrl(c.curve)} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit' }}>{c.curve}</a></dd></div>
+        <div><dt>Creator</dt><dd className="mono"><a href={addressUrl(c.creator)} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit' }}>{c.creator}</a></dd></div>
+      </dl>
     );
   }
+  if (!c.native) return (<><p className="muted">This coin wasn&apos;t launched on Theorem, so it carries no theorem. Its description:</p><p>{c.blurb}</p></>);
   return (
-    <pre className="mono" style={{ margin: 0, whiteSpace: 'pre-wrap', fontSize: 13, lineHeight: 1.6 }}>{`theorem ${c.id}_holds : ∀ n : ℕ, Statement n := by
-  intro n
-  induction n with
-  | zero => simp
-  | succ k ih => omega
-
--- Checked by the Lean 4 kernel. Reviewed by an admin.`}</pre>
+    <>
+      <div className="theorem screen" style={{ boxShadow: 'none', borderWidth: '0 0 0 10px', borderColor: 'var(--coin)' }}><small>Theorem</small>{c.statement}</div>
+      <p className="muted">Rigor <RigorBadge r={c.rigor} /> Not scored: rigor scoring and Lean verification need the Theorem service, which isn&apos;t connected to this build.</p>
+    </>
   );
 }
 
@@ -200,15 +234,24 @@ export function CoinView({ id }: { id: string }) {
   const [tab, setTab] = useState('trades');
 
   if (!c) {
+    if (!app.market.ready && !app.market.error) {
+      return <div className="screen gate-card"><div className="insert">LOADING…</div><p>Reading coins from Solana.</p></div>;
+    }
     return (
       <div className="screen gate-card">
         <div className="insert">GAME OVER</div>
-        <p>No coin with that address on this board.</p>
+        <p>{app.market.error ?? 'No coin with that address on this board.'}</p>
         <Link className="btn" href="/explore">Back to index</Link>
       </div>
     );
   }
-  const tabs: [string, string][] = [['trades', 'Trades'], ['callouts', 'Callouts'], ['theorem', 'Theorem'], ...(c.formal ? [['formal', 'Formal ✓'] as [string, string]] : [])];
+  return <CoinPage c={c} iv={iv} setIv={setIv} tab={tab} setTab={setTab} />;
+}
+
+function CoinPage({ c, iv, setIv, tab, setTab }: { c: Coin; iv: Interval; setIv: (i: Interval) => void; tab: string; setTab: (t: string) => void }) {
+  const app = useApp();
+  const trades = useCoinTrades(c);
+  const tabs: [string, string][] = [['trades', 'Trades'], ['callouts', 'Callouts'], ['theorem', 'Theorem'], ['contract', 'Contract']];
   return (
     <>
       <Link className="crumb" href="/explore">← Back to index</Link>
@@ -220,34 +263,34 @@ export function CoinView({ id }: { id: string }) {
               <h1>${c.ticker} <span className="muted" style={{ color: 'var(--hero-dim)', fontSize: '.6em' }}>{c.name}</span></h1>
               <div className="sub">{c.native ? c.statement : c.blurb}</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>
-                {c.native && <RigorBadge r={c.rigor} />}{c.formal && <FormalBadge />}
+                {c.native && <RigorBadge r={c.rigor} />}
                 <div className="share">
                   <button className="btn sm ghost" onClick={() => { void navigator.clipboard?.writeText(location.href).catch(() => {}); app.toast('COPIED', 'Link copied.'); }}>Copy link</button>
-                  <a className="btn sm ghost" href={`https://x.com/intent/post?text=${encodeURIComponent('$' + c.ticker + ' on Sigmafun')}`} target="_blank" rel="noopener noreferrer">Post on X</a>
+                  <a className="btn sm ghost" href={`https://x.com/intent/post?text=${encodeURIComponent('$' + c.ticker + ' on Theorem')}`} target="_blank" rel="noopener noreferrer">Post on X</a>
                 </div>
               </div>
             </div>
           </div>
           <div className="kv on-dark">
-            <div><span className="label" style={{ color: 'var(--hero-faint)' }}>Price</span><span className="v">{eth(c.price)}</span></div>
+            <div><span className="label" style={{ color: 'var(--hero-faint)' }}>Price</span><span className="v">{sol(c.price)}</span></div>
             <div><span className="label" style={{ color: 'var(--hero-faint)' }}>MCap</span><span className="v">{usd(c.mcap)}</span></div>
-            <div><span className="label" style={{ color: 'var(--hero-faint)' }}>24h vol</span><span className="v">{eth(c.vol)}</span></div>
-            <div><span className="label" style={{ color: 'var(--hero-faint)' }}>24h</span><span className={`v ${c.change >= 0 ? 'up' : 'down'}`}>{c.change >= 0 ? '+' : ''}{c.change.toFixed(1)}%</span></div>
+            <div><span className="label" style={{ color: 'var(--hero-faint)' }}>Raised</span><span className="v">{sol(c.raised)}</span></div>
+            <div><span className="label" style={{ color: 'var(--hero-faint)' }}>Since launch</span><span className={`v ${c.change >= 0 ? 'up' : 'down'}`}>{c.change >= 0 ? '+' : ''}{c.change.toFixed(1)}%</span></div>
           </div>
           <div className="chart crt">
             <div className="chart-bar">
-              <span>Price (ETH)</span>
+              <span>Price (SOL)</span>
               <div className="seg" role="group" aria-label="Chart interval">{INTERVALS.map((i) => <button key={i} aria-pressed={iv === i} onClick={() => setIv(i)}>{i}</button>)}</div>
             </div>
-            <div><Chart c={c} iv={iv} /></div>
+            <div><Chart c={c} iv={iv} trades={trades} /></div>
             <div className="chart-foot">
-              <div className="row"><span>{c.phase === 0 ? `Curve ${Math.floor(c.progress * 100)}% → Uniswap V4` : PHASE[c.phase]}</span><span>launched {c.age} ago by {short(c.creator)}</span></div>
+              <div className="row"><span>{c.phase === 0 ? `Curve ${Math.floor(c.progress * 100)}% → PumpSwap` : PHASE[c.phase]}</span><span>launched {c.age} ago by {short(c.creator)}</span></div>
               <HpBar p={c.progress} />
             </div>
           </div>
           <div className="screen">
             <div className="tabs" role="tablist">{tabs.map(([i, l]) => <button key={i} role="tab" aria-selected={tab === i} onClick={() => setTab(i)}>{l}</button>)}</div>
-            <div className="tabpanel"><TabPanel c={c} tab={tab} /></div>
+            <div className="tabpanel"><TabPanel c={c} tab={tab} trades={trades} /></div>
           </div>
         </div>
         <aside className="screen trade" aria-label="Trade"><TradePanel key={c.id} c={c} /></aside>

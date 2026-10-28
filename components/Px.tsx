@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { avatar } from '@/lib/sprites';
+import { avatar, generated } from '@/lib/sprites';
 
 const BLANK = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 
@@ -10,6 +10,6 @@ export function Px({ seed, large, className = '', size }: { seed: string; large?
   useEffect(() => { setSrc(avatar(seed)); }, [seed]);
   return (
     // eslint-disable-next-line @next/next/no-img-element
-    <img className={`px ${large ? 'lg' : ''} ${className}`} src={src} alt="" width={size ?? (large ? 72 : 48)} height={size ?? (large ? 72 : 48)} />
+    <img className={`px ${large ? 'lg' : ''} ${className}`} src={src} alt="" onError={() => setSrc(generated(seed))} width={size ?? (large ? 72 : 48)} height={size ?? (large ? 72 : 48)} />
   );
 }

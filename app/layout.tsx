@@ -8,14 +8,15 @@ import '@fontsource/jetbrains-mono/600.css';
 import '@fontsource/jetbrains-mono/700.css';
 import './globals.css';
 import { Providers } from '@/components/Providers';
+import { Web3 } from '@/components/Web3';
 import { BackdropFX } from '@/components/BackdropFX';
 import { SiteHeader } from '@/components/SiteHeader';
 import { SiteFooter } from '@/components/SiteFooter';
 import { Ticker } from '@/components/Ticker';
 
 export const metadata: Metadata = {
-  title: { default: "Sigmafun", template: "%s · Sigmafun" },
-  description: 'Theorem-backed coins on Robinhood Chain, in a pixel arcade.',
+  title: { default: "Theorem", template: "%s · Theorem" },
+  description: 'Theorem-backed coins on Solana, in a pixel arcade.',
 };
 
 export const viewport: Viewport = { themeColor: '#050f33', viewportFit: 'cover', width: 'device-width', initialScale: 1 };
@@ -24,6 +25,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body>
+        <Web3>
         <Providers>
           <BackdropFX />
           <a className="sr" href="#view">Skip to content</a>
@@ -32,6 +34,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           <main className="wrap" id="view" tabIndex={-1}>{children}</main>
           <SiteFooter />
         </Providers>
+        </Web3>
       </body>
     </html>
   );
