@@ -1,5 +1,21 @@
+export class SubmittedTransactionError extends Error {
+  constructor(
+    public readonly sig: string,
+    public readonly lastValidBlockHeight: number,
+    public readonly status: 'unknown' | 'failed' | 'expired',
+    message: string,
+    options?: ErrorOptions,
+  ) {
+    super(message, options);
+    this.name = 'SubmittedTransactionError';
+  }
+}
+
 /** One sentence for a failed wallet or program call. */
 export function txError(e: unknown): string {
+  if (e instanceof SubmittedTransactionError && e.status === 'unknown') {
+    return 'This transaction was submitted, but its outcome is still unknown. Check its status before sending another transaction.';
+  }
   /* wallet-adapter errors wrap the wallet's own error, which holds the useful message */
   const inner = (e as { error?: unknown })?.error;
   const raw = [e, inner].filter(Boolean).map((x) => (x instanceof Error ? `${x.name} ${x.message}` : String(x))).join(' ');

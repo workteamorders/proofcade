@@ -50,6 +50,15 @@ function LaunchProgress({ form, mint, onDone }: { form: Form; mint: Keypair; onD
   const started = useRef(-1);
   const done = useRef<LaunchState>({}); /* what is already on-chain, so "try again" resumes */
   const { conn, signer, refresh } = app;
+  const partial = !!(done.current.pending || done.current.created);
+  useEffect(() => {
+    app.setDialogLocked(!p.err || partial);
+  }, [p.err, partial, app.setDialogLocked]);
+  useEffect(() => {
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, []);
   useEffect(() => {
     if (started.current === run) return;
     started.current = run;
@@ -57,7 +66,7 @@ function LaunchProgress({ form, mint, onDone }: { form: Form; mint: Keypair; onD
       if (!signer) throw new Error('Connect a wallet first.');
       setP({ i: 0 });
       const devBuy = form.buy.trim() ? lamportsOf(form.buy) : null;
-      const r = await runLaunch(conn, signer, { name: form.name.trim(), symbol: form.ticker.trim().toUpperCase(), statement: form.stmt.trim(), devBuy, mint, slippagePct: 10 }, (label, sig) => {
+      const r = await runLaunch(conn, signer, { name: form.name.trim(), symbol: form.ticker.trim().toUpperCase(), statement: form.stmt.trim(), devBuy, mint, slippagePct: 1 }, (label, sig) => {
         if (sig) setTx(sig);
         setP({ i: sig ? 2 : /wallet/i.test(label) ? 1 : 0 });
       }, done.current);
@@ -77,11 +86,13 @@ function LaunchProgress({ form, mint, onDone }: { form: Form; mint: Keypair; onD
         <div className="hp" style={{ marginTop: 6 }}>{Array.from({ length: 20 }, (_, n) => <i key={n} className={n < filled ? 'on' : ''} />)}</div>
         {tx && <p className="foot-note"><a href={txUrl(tx)} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit' }}>Tx {short(tx)}</a></p>}
         {p.err && <div className="status bad">{p.err}</div>}
+        <p className="foot-note">Keep this page open until the launch finishes. Recovery is kept only in this session; do not reload. A retry checks any submitted transaction first.</p>
       </div>
       {p.err && (
         <div className="dlg-foot">
-          <button className="btn ghost" onClick={app.closeDialog}>Close</button>
-          <button className="btn" onClick={() => setRun((n) => n + 1)}>Try again</button>
+          {!partial && <button className="btn ghost" onClick={app.closeDialog}>Close</button>}
+          {done.current.created && !done.current.pending && <button className="btn ghost" onClick={() => onDone(mint.publicKey.toBase58(), done.current.created!)}>Finish without first buy</button>}
+          <button className="btn" onClick={() => { setP({ i: 0 }); setRun((n) => n + 1); }}>{done.current.pending ? 'Check status and resume' : 'Try again'}</button>
         </div>
       )}
     </>
@@ -127,6 +138,7 @@ export function LaunchView() {
     const snapshot = w, key = mint;
     app.showDialog({
       title: 'Launching…',
+      locked: true,
       node: <LaunchProgress form={snapshot} mint={key} onDone={(token, tx) => {
         setW(EMPTY); setMint(Keypair.generate()); setStep(0); setTried(false);
         app.toast('LEVEL CLEAR', `$${snapshot.ticker.toUpperCase()} launched.`);
@@ -209,8 +221,8 @@ export function LaunchView() {
                     <div><dt>Name</dt><dd>{w.name}</dd></div><div><dt>Ticker</dt><dd>${w.ticker.toUpperCase()}</dd></div><div><dt>Theorem</dt><dd>{w.stmt}</dd></div>
                     <div><dt>Address</dt><dd className="mono">{mint ? short(mintStr) : '…'}</dd></div>
                     <div><dt>Pair</dt><dd>SOL (pump.fun curve)</dd></div>
-                    <div><dt>First buy</dt><dd>{buyLamports ? `${w.buy} SOL` : 'None'}</dd></div>
-                    <div><dt>Network fees</dt><dd>A few cents of SOL, plus rent for the new accounts</dd></div>
+                    <div><dt>First buy</dt><dd>{buyLamports ? `${w.buy} SOL quote; up to ${fmt(toSol(buyLamports) * 1.01)} SOL with 1% slippage` : 'None'}</dd></div>
+                    <div><dt>Network fees</dt><dd>Additional SOL is needed for transaction fees and account rent.</dd></div>
                     <div><dt>Rigor score</dt><dd>Not scored (needs the Theorem service)</dd></div>
                   </div>
                   {app.market.error && <div className="status bad">Could not read pump.fun from {NETWORK_NAME}. Try again in a moment.</div>}

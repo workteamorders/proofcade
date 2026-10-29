@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { PublicKey } from '@solana/web3.js';
 import { useApp } from '@/lib/app';
@@ -10,7 +10,8 @@ import { addressUrl, tokenUrl, txUrl } from '@/lib/sol/config';
 import { ago, readTrades, type Trade } from '@/lib/sol/market';
 import { BN, PUMP_SDK, bondingCurvePda, lamportsOf, quoteBuy, quoteSell, rawOf, toSol, toTokens } from '@/lib/sol/pump';
 import * as trade from '@/lib/sol/trade';
-import { txError } from '@/lib/sol/errors';
+import { SubmittedTransactionError, txError } from '@/lib/sol/errors';
+import { confirm, type Wallet } from '@/lib/sol/tx';
 import { HpBar, Msg, RigorBadge } from '../ui';
 import { Px } from '../Px';
 
@@ -99,17 +100,18 @@ function TradePanel({ c }: { c: Coin }) {
   const [amt, setAmt] = useState('');
   const [slip, setSlip] = useState('5');
   const [tr, setTr] = useState<TradeState | null>(null);
+  const pending = useRef<SubmittedTransactionError | null>(null);
+  const running = useRef(false);
+  useEffect(() => {
+    if (!tr?.busy && !pending.current) return;
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [tr]);
   const curveQ = useCurve(c);
   const curve = curveQ.data;
 
-  if (c.phase > 0 || curve?.complete) {
-    return (
-      <div className="trade-body">
-        <div className="status">${c.ticker} has finished its curve and graduated. Curve trading is closed.</div>
-        <p className="foot-note">Powered by pump.fun · third-party software</p>
-      </div>
-    );
-  }
+  const graduated = c.phase > 0 || curve?.complete;
   const buy = side === 'buy', unit = buy ? 'SOL' : '$' + c.ticker;
   const held = app.holdings[c.id] || 0;
   const slipPct = Math.min(50, Math.max(0.1, parseFloat(slip) || 5));
@@ -118,13 +120,14 @@ function TradePanel({ c }: { c: Coin }) {
     ? (buy ? quoteBuy(app.pump, curve, input) : quoteSell(app.pump, curve, input))
     : null;
   const recvText = q ? ('tokens' in q ? `${fmt(toTokens(q.tokens))} $${c.ticker}` : `${fmt(toSol(q.lamports))} SOL`) : '';
-  const minText = q ? ('tokens' in q ? `${fmt(toTokens(q.tokens) * (1 - slipPct / 100))} $${c.ticker}` : `${fmt(toSol(q.lamports) * (1 - slipPct / 100))} SOL`) : '';
+  const limitText = q && input ? ('tokens' in q ? `${fmt(toSol(input.add(input.mul(new BN(Math.floor(slipPct * 10))).div(new BN(1000)))))} SOL` : `${fmt(toSol(q.lamports) * (1 - slipPct / 100))} SOL`) : '';
   const label = tr?.busy ? tr.label : !app.connected ? 'Insert coin · connect wallet' : `${buy ? 'Buy' : 'Sell'} $${c.ticker}`;
 
-  const run = async () => {
-    const w = app.signer; if (!w) return;
+  const run = async (w: Wallet) => {
+    if (running.current || pending.current || graduated) return;
     const amount = buy ? lamportsOf(amt) : rawOf(amt);
     if (!amount) { setTr({ err: true, msg: 'Enter an amount first.' }); return; }
+    running.current = true;
     try {
       if (!buy && amount.gt(new BN(Math.round(held * 1e6)))) throw new Error(`You only hold ${fmt(held)} $${c.ticker}.`);
       const step = (label: string, sig?: string) => setTr({ busy: true, label, tx: sig });
@@ -135,18 +138,49 @@ function TradePanel({ c }: { c: Coin }) {
       setAmt('');
       app.toast('LEVEL UP', `+${out}`);
       void app.refresh();
-    } catch (e) { setTr({ err: true, msg: txError(e) }); }
+    } catch (e) {
+      if (e instanceof SubmittedTransactionError && e.status === 'unknown') pending.current = e;
+      setTr({ err: true, tx: e instanceof SubmittedTransactionError ? e.sig : undefined, msg: txError(e) });
+    } finally { running.current = false; }
   };
-  const onTrade = () => app.needWallet('A wallet is needed to trade.', () => {
+  const checkPending = async () => {
+    const p = pending.current;
+    if (!p || running.current) return;
+    running.current = true;
+    setTr({ busy: true, tx: p.sig, label: 'Checking submitted transaction...' });
+    try {
+      await confirm(app.conn, p.sig, p.lastValidBlockHeight);
+      pending.current = null;
+      setTr({ ok: true, tx: p.sig, msg: 'Your submitted transaction is confirmed.' });
+      setAmt('');
+      void app.refresh();
+    } catch (e) {
+      if (e instanceof SubmittedTransactionError && e.status !== 'unknown') pending.current = null;
+      setTr({ err: true, tx: p.sig, msg: txError(e) });
+    } finally { running.current = false; }
+  };
+  const onTrade = () => app.needWallet('A wallet is needed to trade.', (w) => {
     if (!(buy ? lamportsOf(amt) : rawOf(amt))) { setTr({ err: true, msg: 'Enter an amount first.' }); return; }
-    app.needRisk(() => { void run(); });
+    app.needRisk(() => { void run(w); });
   });
+
+  if (graduated) {
+    return (
+      <div className="trade-body">
+        <div className="status">${c.ticker} has finished its curve and graduated. Curve trading is closed.</div>
+        {tr?.msg && <div className={`status ${tr.err ? 'bad' : 'ok'}`}>{tr.msg}</div>}
+        {tr?.tx && <p><a href={txUrl(tr.tx)} target="_blank" rel="noopener noreferrer">View submitted transaction</a></p>}
+        {pending.current && <button className="btn wide" disabled={!!tr?.busy} onClick={() => { void checkPending(); }}>{tr?.busy ? tr.label : 'Check submitted transaction'}</button>}
+        <p className="foot-note">Powered by pump.fun · third-party software</p>
+      </div>
+    );
+  }
 
   return (
     <>
       <div className="sides" role="tablist">
-        <button className="b" role="tab" aria-selected={buy} onClick={() => { setSide('buy'); setAmt(''); setTr(null); }}>BUY</button>
-        <button className="s" role="tab" aria-selected={!buy} onClick={() => { setSide('sell'); setAmt(''); setTr(null); }}>SELL</button>
+        <button className="b" role="tab" aria-selected={buy} disabled={!!tr?.busy || !!pending.current} onClick={() => { setSide('buy'); setAmt(''); setTr(null); }}>BUY</button>
+        <button className="s" role="tab" aria-selected={!buy} disabled={!!tr?.busy || !!pending.current} onClick={() => { setSide('sell'); setAmt(''); setTr(null); }}>SELL</button>
       </div>
       <div className="trade-body">
         <div className="field">
@@ -164,17 +198,18 @@ function TradePanel({ c }: { c: Coin }) {
         {q && (
           <dl className="quote">
             <div><dt>You receive</dt><dd>≈ {recvText}</dd></div>
-            <div><dt>Minimum</dt><dd>{minText}</dd></div>
+            <div><dt>{buy ? 'Maximum SOL cost' : 'Minimum SOL received'}</dt><dd>{limitText}</dd></div>
             <div><dt>Price impact (with fees)</dt><dd className={q.impact > 5 ? 'warn' : ''}>{q.impact.toFixed(2)}%</dd></div>
           </dl>
         )}
         {input && curve && !q && <div className="status bad">That amount is too small or too large for this curve.</div>}
         {curveQ.isError && <div className="status bad">Could not read this curve from Solana. Try again in a moment.</div>}
         <label className="slip">Slippage <input type="number" min={0.5} max={50} step={0.5} value={slip} onChange={(e) => setSlip(e.target.value)} aria-label="Slippage percent" /> %</label>
-        <button className={`btn ${buy ? 'buy' : 'sell'} wide`} onClick={onTrade} disabled={!!tr?.busy || (app.connected && !curve)}>{label}</button>
+        <button className={`btn ${buy ? 'buy' : 'sell'} wide`} onClick={pending.current ? () => { void checkPending(); } : onTrade} disabled={!!tr?.busy || (!pending.current && app.connected && !curve)}>{tr?.busy ? tr.label : pending.current ? 'Check submitted transaction' : label}</button>
         {tr?.msg && <div className={`status ${tr.ok ? 'ok' : tr.err ? 'bad' : ''}`}>{tr.msg}{tr.tx && <> <a href={txUrl(tr.tx)} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'underline' }}>View tx {short(tr.tx)}</a></>}</div>}
         {tr?.busy && tr.tx && <div className="status"><a href={txUrl(tr.tx)} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'underline' }}>Tx {short(tr.tx)}</a></div>}
         <p className="foot-note">Powered by pump.fun · third-party software</p>
+        <p className="foot-note">SOL limits exclude transaction fees and account rent. Keep this page open while a transaction is pending.</p>
       </div>
     </>
   );

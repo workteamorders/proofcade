@@ -3,7 +3,8 @@ import { Keypair, SystemProgram, TransactionInstruction, type Connection, type P
 import { getBuyTokenAmountFromSolAmount } from '@pump-fun/pump-sdk';
 import { CU, MEMO_PROGRAM_ID, MEMO_TAG, SITE_URL, TAG } from './config';
 import { BN, NATIVE_MINT, PUMP_SDK, bondingCurvePda, online } from './pump';
-import { buildTx, fits, run, type Step, type Wallet } from './tx';
+import { buildTx, confirm, fits, run, type Step, type Wallet } from './tx';
+import { SubmittedTransactionError } from './errors';
 import * as trade from './trade';
 
 export type LaunchInput = { name: string; symbol: string; statement: string; devBuy: BN | null; mint: Keypair; slippagePct: number };
@@ -28,7 +29,20 @@ export function marker(user: PublicKey, input: LaunchInput): TransactionInstruct
 }
 
 /** What has already happened in this launch, so a retry does not repeat it. */
-export type LaunchState = { marker?: string; created?: string; bought?: string };
+export type LaunchState = {
+  wallet?: string;
+  marker?: string;
+  created?: string;
+  bought?: string;
+  pending?: {
+    stage: 'marker' | 'create' | 'buy';
+    sig: string;
+    lastValidBlockHeight: number;
+    includesBuy: boolean;
+  };
+};
+
+const activeLaunches = new WeakSet<LaunchState>();
 
 /**
  * Launch in up to three transactions, since one cannot hold the statement and the coin:
@@ -38,43 +52,78 @@ export type LaunchState = { marker?: string; created?: string; bought?: string }
  * `state` records what is done, so "try again" resumes instead of starting over.
  */
 export async function launch(conn: Connection, w: Wallet, input: LaunchInput, step: Step, state: LaunchState = {}): Promise<{ mint: string; sigs: string[] }> {
-  step('Reading pump.fun launch terms…');
-  const sdk = online(conn);
-  const [global, feeConfig] = await Promise.all([sdk.fetchGlobal(), sdk.fetchFeeConfig().catch(() => null)]);
-  if (!global.createV2Enabled) throw new Error('pump.fun has paused new launches on this cluster.');
-  const mint = input.mint.publicKey, user = w.publicKey;
-  const uri = metadataUri(mint, input.name, input.symbol);
-  const base = { mint, name: input.name, symbol: input.symbol, uri, creator: user, user, mayhemMode: false };
+  if (activeLaunches.has(state)) throw new Error('This launch is already in progress.');
+  activeLaunches.add(state);
   const sigs: string[] = [];
+  const submitted = (stage: NonNullable<LaunchState['pending']>['stage'], includesBuy = false): Step => (label, sig, lastValidBlockHeight) => {
+    if (sig !== undefined && lastValidBlockHeight !== undefined) {
+      state.pending = { stage, sig, lastValidBlockHeight, includesBuy };
+    }
+    step(label, sig, lastValidBlockHeight);
+  };
+  try {
+    const wallet = w.publicKey.toBase58();
+    if (state.wallet && state.wallet !== wallet) throw new Error('Reconnect the wallet that started this launch before resuming.');
+    state.wallet = wallet;
+    if (state.pending) {
+      const pending = state.pending;
+      step('Checking the submitted transaction…', pending.sig, pending.lastValidBlockHeight);
+      await confirm(conn, pending.sig, pending.lastValidBlockHeight);
+      if (pending.stage === 'marker') state.marker = pending.sig;
+      if (pending.stage === 'create') {
+        state.created = pending.sig;
+        if (pending.includesBuy) state.bought = pending.sig;
+      }
+      if (pending.stage === 'buy') state.bought = pending.sig;
+      sigs.push(pending.sig);
+      delete state.pending;
+    }
+    if (state.marker && state.created && (!input.devBuy || state.bought)) return { mint: input.mint.publicKey.toBase58(), sigs };
+    step('Reading pump.fun launch terms…');
+    const sdk = online(conn);
+    const [global, feeConfig] = await Promise.all([sdk.fetchGlobal(), sdk.fetchFeeConfig().catch(() => null)]);
+    if (!global.createV2Enabled) throw new Error('pump.fun has paused new launches on this cluster.');
+    const mint = input.mint.publicKey, user = w.publicKey;
+    const uri = metadataUri(mint, input.name, input.symbol);
+    const base = { mint, name: input.name, symbol: input.symbol, uri, creator: user, user, mayhemMode: false };
 
-  if (!state.marker) {
-    state.marker = await run(conn, w, marker(user, input), { units: CU.marker, step, label: 'Confirm 1 of 2 in your wallet: the theorem…' });
-    sigs.push(state.marker);
-  }
-  if (!state.created) {
-    let ixs: TransactionInstruction[] = [await PUMP_SDK.createV2Instruction(base)];
-    let withBuy = false;
-    if (input.devBuy) {
-      const amount = getBuyTokenAmountFromSolAmount({ global, feeConfig, mintSupply: null, bondingCurve: null, amount: input.devBuy, quoteMint: NATIVE_MINT });
-      const together = await PUMP_SDK.createV2AndBuyInstructions({ global, ...base, amount, solAmount: input.devBuy });
-      const { size } = await buildTx(conn, user, together, CU.launch);
-      if (fits(size)) { ixs = together; withBuy = true; }
+    if (!state.marker) {
+      state.marker = await run(conn, w, marker(user, input), { units: CU.marker, step: submitted('marker'), label: 'Confirm 1 of 2 in your wallet: the theorem…' });
+      delete state.pending;
+      sigs.push(state.marker);
     }
-    const sig = await run(conn, w, ixs, { units: CU.launch, signers: [input.mint], step, label: 'Confirm 2 of 2 in your wallet: the coin…' });
-    state.created = sig; sigs.push(sig);
-    if (withBuy) state.bought = sig;
-  }
-  if (input.devBuy && !state.bought) {
-    step('Your first buy needs its own transaction…');
-    /* the new curve can take a few seconds to show up on the RPC node */
-    let seen = false;
-    for (let i = 0; i < 15 && !seen; i++) {
-      seen = !!(await conn.getAccountInfo(bondingCurvePda(mint), 'confirmed'));
-      if (!seen) await new Promise((r) => setTimeout(r, 1000));
+    if (!state.created) {
+      let ixs: TransactionInstruction[] = [await PUMP_SDK.createV2Instruction(base)];
+      let withBuy = false;
+      if (input.devBuy) {
+        const amount = getBuyTokenAmountFromSolAmount({ global, feeConfig, mintSupply: null, bondingCurve: null, amount: input.devBuy, quoteMint: NATIVE_MINT });
+        const together = await PUMP_SDK.createV2AndBuyInstructions({ global, ...base, amount, solAmount: input.devBuy });
+        const { size } = await buildTx(conn, user, together, CU.launch);
+        if (fits(size)) { ixs = together; withBuy = true; }
+      }
+      const sig = await run(conn, w, ixs, { units: CU.launch, signers: [input.mint], step: submitted('create', withBuy), label: 'Confirm 2 of 2 in your wallet: the coin…' });
+      state.created = sig; sigs.push(sig);
+      if (withBuy) state.bought = sig;
+      delete state.pending;
     }
-    if (!seen) throw new Error('Your coin was created, but its first buy could not start yet. Press Try again in a moment.');
-    const r = await trade.buy(conn, w, mint, input.devBuy, input.slippagePct, step);
-    state.bought = r.sig; sigs.push(r.sig);
+    if (input.devBuy && !state.bought) {
+      step('Your first buy needs its own transaction…');
+      /* the new curve can take a few seconds to show up on the RPC node */
+      let seen = false;
+      for (let i = 0; i < 15 && !seen; i++) {
+        seen = !!(await conn.getAccountInfo(bondingCurvePda(mint), 'confirmed'));
+        if (!seen) await new Promise((r) => setTimeout(r, 1000));
+      }
+      if (!seen) throw new Error('Your coin was created, but its first buy could not start yet. Press Try again in a moment.');
+      const r = await trade.buy(conn, w, mint, input.devBuy, input.slippagePct, submitted('buy'));
+      state.bought = r.sig; sigs.push(r.sig);
+      delete state.pending;
+    }
+    return { mint: mint.toBase58(), sigs };
+  } catch (e) {
+    if (e instanceof SubmittedTransactionError && e.status !== 'unknown' && state.pending?.sig === e.sig) delete state.pending;
+    throw e;
+  } finally {
+    activeLaunches.delete(state);
   }
-  return { mint: mint.toBase58(), sigs };
 }

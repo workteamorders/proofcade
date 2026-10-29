@@ -8,8 +8,8 @@ import { BigCoin, CoinCard, GateNote } from '../ui';
 
 const STEPS = [
   ['01', 'Write the theorem', 'State a claim in math notation when you launch.', 'xⁿ + yⁿ = zⁿ has no solutions for n > 2.'],
-  ['02', 'Get a rigor score', 'An AI grades it from 0 to 100. It is an estimate, not a proof check.', 'Σ 94'],
-  ['03', 'Freeze it on-chain', 'The statement and score go into the coin. The proof sketch lives on IPFS.', 'ipfs://bafy…q4'],
+  ['02', 'Review your statement', 'Rigor scoring and formal verification are not available in this beta.', 'UNVERIFIED'],
+  ['03', 'Write it on-chain', 'The statement is recorded in a Solana transaction memo alongside the coin launch.', 'SOLANA MEMO'],
   ['04', 'Trade, then graduate', 'It trades on its pump.fun curve and graduates to PumpSwap when the bar fills.', '████████░░ 80%'],
 ];
 
@@ -33,7 +33,7 @@ export function HomeView() {
         <div>
           <div className="eyebrow"><b>Theorem</b> · Solana · Routed through pump.fun</div>
           <h1 id="h">Every coin is a level. <span className="hl">Every level is a theorem.</span></h1>
-          <p className="lead">Theorem-backed coins. Formally verified. Fully on-chain. Pick a statement, read its rigor score, then press start.</p>
+          <p className="lead">Launch a coin with a mathematical statement recorded on Solana. Explore and test trading on pump.fun curves. Statements are not formally verified in this beta.</p>
           <div className="cta">
             <Link className="btn" href="/launch">▶ Press start · launch a coin</Link>
             <Link className="btn ghost" href="/explore">Explore coins</Link>

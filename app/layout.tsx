@@ -17,6 +17,7 @@ import { Ticker } from '@/components/Ticker';
 export const metadata: Metadata = {
   title: { default: "Theorem", template: "%s · Theorem" },
   description: 'Theorem-backed coins on Solana, in a pixel arcade.',
+  robots: process.env.NEXT_PUBLIC_SOLANA_CLUSTER === 'mainnet-beta' ? undefined : { index: false, follow: false },
 };
 
 export const viewport: Viewport = { themeColor: '#050f33', viewportFit: 'cover', width: 'device-width', initialScale: 1 };

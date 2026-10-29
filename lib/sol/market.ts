@@ -23,7 +23,7 @@ export type Market = {
   known: Record<string, Known>;
   /** Launch memos whose coin does not exist yet: the memo lands a moment before the coin does. */
   pending?: Record<string, PendingLaunch>;
-  /** Newest launch signature seen, so the next scan only reads what is new. */
+  /** Newest launch signature fully read, so unresolved transactions are retried. */
   newest?: string;
 };
 export type Trade = { sig: string; coin: string; side: 'buy' | 'sell'; trader: string; sol: number; tokens: number; price: number; time: number | null };
@@ -38,12 +38,18 @@ function readLaunch(tx: ParsedTransactionWithMeta | null): { memo: Memo; payer: 
   if (!tx || !tx.meta || tx.meta.err) return null;
   const keys = tx.transaction.message.accountKeys;
   const payer = keys[0]?.pubkey.toBase58();
+  if (!payer) return null;
   for (const ix of tx.transaction.message.instructions) {
     const p = ix as { program?: string; parsed?: unknown };
     if (p.program !== 'spl-memo' || typeof p.parsed !== 'string') continue;
     try {
-      const memo = JSON.parse(p.parsed) as Memo;
-      if (memo.t === MEMO_TAG && typeof memo.m === 'string' && typeof memo.n === 'string' && typeof memo.s === 'string' && typeof memo.x === 'string') return { memo, payer, time: tx.blockTime ?? 0 };
+      const memo = JSON.parse(p.parsed);
+      if (!memo || typeof memo !== 'object' || Array.isArray(memo) || Object.keys(memo).length !== 5) continue;
+      if (memo.t !== MEMO_TAG || typeof memo.m !== 'string' || typeof memo.n !== 'string' || typeof memo.s !== 'string' || typeof memo.x !== 'string') continue;
+      if (new PublicKey(memo.m).toBase58() !== memo.m) continue;
+      if (!memo.n.trim() || Buffer.byteLength(memo.n, 'utf8') > 32 || !/^[a-zA-Z0-9]{2,10}$/.test(memo.s)) continue;
+      if (memo.x.trim().length < 12 || Buffer.byteLength(memo.x, 'utf8') > 280) continue;
+      return { memo, payer, time: tx.blockTime ?? 0 };
     } catch { /* not ours */ }
   }
   return null;
@@ -85,17 +91,19 @@ export async function readMarket(conn: Connection, prev?: Market): Promise<Marke
   const pending: Record<string, PendingLaunch> = { ...(prev?.pending ?? {}) };
   if (sigs.length) {
     const txs = await parsedTxs(conn, sigs);
+    /* A confirmed signature can precede its parsed transaction on the RPC node. */
+    if (sigs.some((_, i) => !txs[i])) newest = prev?.newest;
     const found = txs.flatMap((t, i) => { const l = readLaunch(t); return l ? [{ ...l, i }] : []; }).reverse(); /* oldest first */
-    for (const f of found) pending[f.memo.m] = f;
+    for (const f of found) if (!known[f.memo.m]) pending[`${f.memo.m}:${f.payer}`] = f;
   }
-  const fresh = Object.values(pending).filter((f) => !known[f.memo.m]);
+  const fresh = Object.entries(pending).filter(([, f]) => !known[f.memo.m]);
   if (fresh.length) {
-    const cs = await curves(conn, fresh.map((f) => f.memo.m));
+    const cs = await curves(conn, fresh.map(([, f]) => f.memo.m));
     const nowS = Date.now() / 1000;
-    fresh.forEach((f, k) => {
+    fresh.forEach(([key, f], k) => {
       const c = cs[k], m = f.memo.m;
-      if (!c) { if (nowS - f.time > PENDING_SECONDS) delete pending[m]; return; } /* the coin may still be on its way */
-      delete pending[m];
+      if (!c) { if (nowS - f.time > PENDING_SECONDS) delete pending[key]; return; } /* the coin may still be on its way */
+      delete pending[key];
       /* the coin must belong to the wallet that paid for the launch, or the memo is someone else's */
       if (c.creator.toBase58() !== f.payer) return;
       known[m] = { id: m, curve: bondingCurvePda(m).toBase58(), creator: f.payer, name: f.memo.n, symbol: f.memo.s, statement: f.memo.x, created: f.time, order: f.time * 1000 + f.i };

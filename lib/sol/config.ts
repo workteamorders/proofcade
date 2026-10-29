@@ -10,6 +10,7 @@ const env = (v: string | undefined, d: string) => (v && v.trim() ? v.trim() : d)
 
 export type Cluster = 'devnet' | 'mainnet-beta';
 export const CLUSTER: Cluster = process.env.NEXT_PUBLIC_SOLANA_CLUSTER === 'mainnet-beta' ? 'mainnet-beta' : 'devnet';
+export const GENESIS_HASH = CLUSTER === 'devnet' ? 'EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG' : '5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d';
 export const IS_TEST = CLUSTER !== 'mainnet-beta';
 export const NETWORK_NAME = IS_TEST ? 'Solana Devnet' : 'Solana';
 export const PUBLIC_RPC_URL = env(process.env.NEXT_PUBLIC_SOLANA_RPC_URL, '');

@@ -10,7 +10,7 @@ export function SiteFooter() {
           <div><Link href="/explore">Explore</Link><Link href="/launch">Launch</Link><Link href="/arcade">Arcade</Link></div>
           <div>Rigor scores, when they exist, are AI estimates, not proof checks.<br />pump.fun is third-party software. Not financial advice.<br />{SOL_USD_NOTE}</div>
         </div>
-        {IS_TEST && <div className="demo">Devnet build. Coins and SOL here have no real value. Switch the cluster to mainnet-beta to go live.</div>}
+        {IS_TEST && <div className="demo">Devnet beta. Coins and SOL here have no real value. Use a test wallet and free devnet SOL. Verification and rewards are not available.</div>}
       </div>
     </footer>
   );

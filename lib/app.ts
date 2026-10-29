@@ -5,7 +5,7 @@ import type { Connection } from '@solana/web3.js';
 import type { Ctx } from './sol/pump';
 import type { Wallet } from './sol/tx';
 
-export type DialogSpec = { title: string; node: ReactNode };
+export type DialogSpec = { title: string; node: ReactNode; locked?: boolean };
 
 export type AppCtx = {
   /* wallet (Solana wallet adapter) */
@@ -24,8 +24,8 @@ export type AppCtx = {
   pump: Ctx | null;
   openWallet: () => void;
   disconnect: () => void;
-  /** Run fn once a wallet is connected. Opens the connect dialog if needed. */
-  needWallet: (reason: string, fn: () => void) => void;
+  /** Run fn with the current signer once a wallet is connected. */
+  needWallet: (reason: string, fn: (wallet: Wallet) => void) => void;
   /** Run fn once the one-time risk notice has been accepted. */
   needRisk: (fn: () => void) => void;
   acceptRisk: () => void;
@@ -45,6 +45,7 @@ export type AppCtx = {
   toast: (title: string, text: string) => void;
   showDialog: (d: DialogSpec) => void;
   closeDialog: () => void;
+  setDialogLocked: (locked: boolean) => void;
   sfxOn: boolean;
   toggleSfx: () => void;
 };

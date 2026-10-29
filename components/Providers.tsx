@@ -24,6 +24,8 @@ export function Providers({ children }: { children: ReactNode }) {
   const pk = w.publicKey;
   const address = pk?.toBase58();
   const connected = w.connected && !!pk;
+  const sendTransaction = w.sendTransaction;
+  const signer = useMemo<Wallet | null>(() => (connected && pk ? { publicKey: pk, sendTransaction: sendTransaction as Wallet['sendTransaction'] } : null), [connected, pk, sendTransaction]);
   const balQ = useQuery({
     queryKey: ['sol-balance', address],
     enabled: connected,
@@ -31,13 +33,15 @@ export function Providers({ children }: { children: ReactNode }) {
     queryFn: () => conn.getBalance(pk!, 'confirmed'),
   });
   const [riskOK, setRiskOK] = useState(false);
-  const live = useRef({ connected, riskOK });
-  live.current = { connected, riskOK };
-  const pendingWallet = useRef<(() => void) | null>(null);
+  const live = useRef({ connected, riskOK, signer });
+  live.current = { connected, riskOK, signer };
+  const pendingWallet = useRef<((wallet: Wallet) => void) | null>(null);
   const pendingRisk = useRef<(() => void) | null>(null);
 
   /* ---- ui ---- */
   const [dialog, setDialog] = useState<DialogSpec | null>(null);
+  const dialogRef = useRef(dialog);
+  dialogRef.current = dialog;
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [sfxOn, setSfxOn] = useState(true);
   const lastFocus = useRef<HTMLElement | null>(null);
@@ -53,10 +57,21 @@ export function Providers({ children }: { children: ReactNode }) {
     lastFocus.current = document.activeElement as HTMLElement | null;
     setDialog(d);
   }, []);
+  const setDialogLocked = useCallback((locked: boolean) => {
+    setDialog((d) => d && d.locked !== locked ? { ...d, locked } : d);
+  }, []);
   const closeDialog = useCallback(() => {
+    if (dialogRef.current?.locked) return;
+    pendingWallet.current = null;
+    pendingRisk.current = null;
     setDialog(null);
     setTimeout(() => { if (lastFocus.current?.isConnected) lastFocus.current.focus(); }, 0);
   }, []);
+
+  useEffect(() => {
+    pendingWallet.current = null;
+    pendingRisk.current = null;
+  }, [pathname]);
 
   const toggleSfx = useCallback(() => {
     const next = !audio.on;
@@ -72,7 +87,7 @@ export function Providers({ children }: { children: ReactNode }) {
       setDialog((d) => (d && d.title === 'Insert coin' ? null : d));
       toast('PLAYER 1 READY', `${short(address!)} connected.`);
       const p = pendingWallet.current; pendingWallet.current = null;
-      if (p) setTimeout(p, 0);
+      if (p && live.current.signer) p(live.current.signer);
     }
     if (!connected && wasConnected.current) toast('GAME OVER', 'Wallet disconnected.');
     wasConnected.current = connected;
@@ -84,8 +99,8 @@ export function Providers({ children }: { children: ReactNode }) {
     showDialog(live.current.connected ? { title: 'Player 1', node: <AccountDialog /> } : { title: 'Insert coin', node: <ConnectDialog /> });
   }, [showDialog]);
 
-  const needWallet = useCallback((reason: string, fn: () => void) => {
-    if (live.current.connected) { fn(); return; }
+  const needWallet = useCallback((reason: string, fn: (wallet: Wallet) => void) => {
+    if (live.current.signer) { fn(live.current.signer); return; }
     pendingWallet.current = fn;
     showDialog({ title: 'Insert coin', node: <ConnectDialog reason={reason} /> });
   }, [showDialog]);
@@ -101,9 +116,6 @@ export function Providers({ children }: { children: ReactNode }) {
     const f = pendingRisk.current; pendingRisk.current = null;
     if (f) setTimeout(f, 0);
   }, []);
-
-  const sendTransaction = w.sendTransaction;
-  const signer = useMemo<Wallet | null>(() => (pk ? { publicKey: pk, sendTransaction: sendTransaction as Wallet['sendTransaction'] } : null), [pk, sendTransaction]);
 
   /* ---- market, straight from the chain ---- */
   const marketQ = useQuery({
@@ -174,14 +186,23 @@ export function Providers({ children }: { children: ReactNode }) {
     return () => clearInterval(id);
   }, [toast]);
 
-  /* dialog: Esc to close, focus the first control when it opens */
+  /* Keep keyboard focus inside the dialog, including while a launch cannot be dismissed. */
   const dlgRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!dialog) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') closeDialog(); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeDialog();
+      if (e.key !== 'Tab') return;
+      const controls = Array.from(dlgRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]') ?? []).filter((el) => el.getClientRects().length);
+      const first = controls[0], last = controls[controls.length - 1];
+      if (!first) { e.preventDefault(); dlgRef.current?.focus(); return; }
+      if (!controls.includes(document.activeElement as HTMLElement) || (e.shiftKey ? document.activeElement === first : document.activeElement === last)) {
+        e.preventDefault(); (e.shiftKey ? last : first).focus();
+      }
+    };
     document.addEventListener('keydown', onKey);
     const f = dlgRef.current?.querySelector<HTMLElement>('button:not([data-close]), input, select');
-    (f || dlgRef.current?.querySelector<HTMLElement>('[data-close]'))?.focus();
+    (f || dlgRef.current?.querySelector<HTMLElement>('[data-close]') || dlgRef.current)?.focus();
     return () => document.removeEventListener('keydown', onKey);
   }, [dialog, closeDialog]);
 
@@ -196,17 +217,17 @@ export function Providers({ children }: { children: ReactNode }) {
     connected, address: address ?? '', balance, holdings, costBasis, conn, signer, pump,
     openWallet, disconnect, needWallet, needRisk, acceptRisk,
     coins: myCoins, getCoin, market, refresh, msgs, postMsg, react, toastsOn, setToastsOn,
-    toast, showDialog, closeDialog, sfxOn, toggleSfx,
+    toast, showDialog, closeDialog, setDialogLocked, sfxOn, toggleSfx,
   }), [connected, address, balance, holdings, costBasis, conn, signer, pump, openWallet, disconnect, needWallet, needRisk, acceptRisk,
-    myCoins, getCoin, market, refresh, msgs, postMsg, react, toastsOn, toast, showDialog, closeDialog, sfxOn, toggleSfx]);
+    myCoins, getCoin, market, refresh, msgs, postMsg, react, toastsOn, toast, showDialog, closeDialog, setDialogLocked, sfxOn, toggleSfx]);
 
   return (
     <AppContext.Provider value={value}>
       {children}
       {dialog && (
         <div className="scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) closeDialog(); }}>
-          <div className="dlg" role="dialog" aria-modal="true" aria-label={dialog.title} ref={dlgRef}>
-            <div className="dlg-head"><span>{dialog.title}</span><button data-close onClick={closeDialog} aria-label="Close">×</button></div>
+          <div className="dlg" role="dialog" aria-modal="true" aria-label={dialog.title} ref={dlgRef} tabIndex={-1}>
+            <div className="dlg-head"><span>{dialog.title}</span>{!dialog.locked && <button data-close onClick={closeDialog} aria-label="Close">×</button>}</div>
             {dialog.node}
           </div>
         </div>

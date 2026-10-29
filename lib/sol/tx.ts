@@ -3,7 +3,8 @@ import {
   ComputeBudgetProgram, TransactionMessage, VersionedTransaction,
   type Connection, type Keypair, type PublicKey, type TransactionInstruction,
 } from '@solana/web3.js';
-import { PRIORITY_MICROLAMPORTS } from './config';
+import { GENESIS_HASH, PRIORITY_MICROLAMPORTS } from './config';
+import { SubmittedTransactionError } from './errors';
 
 /** What the wallet adapter's `useWallet()` gives us. */
 export type Wallet = {
@@ -14,6 +15,7 @@ export type Wallet = {
 const MAX_TX_BYTES = 1232;
 
 export async function buildTx(conn: Connection, payer: PublicKey, ixs: TransactionInstruction[], units: number) {
+  if (await conn.getGenesisHash() !== GENESIS_HASH) throw new Error('RPC network does not match this app. Check the RPC configuration before continuing.');
   const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash('confirmed');
   const msg = new TransactionMessage({
     payerKey: payer,
@@ -45,19 +47,34 @@ export async function simulate(conn: Connection, tx: VersionedTransaction): Prom
 
 /** Poll for confirmation. The websocket-based confirm hangs on RPCs that block subscriptions. */
 export async function confirm(conn: Connection, sig: string, lastValidBlockHeight: number, timeoutMs = 90_000): Promise<void> {
-  const t0 = Date.now();
-  while (Date.now() - t0 < timeoutMs) {
-    const { value } = await conn.getSignatureStatuses([sig], { searchTransactionHistory: true });
-    const s = value[0];
-    if (s?.err) throw new Error(`The transaction failed on-chain: ${JSON.stringify(s.err)}`);
-    if (s && (s.confirmationStatus === 'confirmed' || s.confirmationStatus === 'finalized')) return;
-    if ((await conn.getBlockHeight('confirmed')) > lastValidBlockHeight) throw new Error('The transaction expired before it confirmed (blockhash expired).');
-    await new Promise((r) => setTimeout(r, 1200));
+  try {
+    if (await conn.getGenesisHash() !== GENESIS_HASH) throw new Error('RPC network does not match this app.');
+    const t0 = Date.now();
+    while (Date.now() - t0 < timeoutMs) {
+      let { value: [s] } = await conn.getSignatureStatuses([sig], { searchTransactionHistory: true });
+      if (!(s && (s.confirmationStatus === 'confirmed' || s.confirmationStatus === 'finalized'))) {
+        if ((await conn.getBlockHeight('finalized')) <= lastValidBlockHeight) {
+          await new Promise((r) => setTimeout(r, 1200));
+          continue;
+        }
+        // A transaction can land between the first status read and the height check.
+        ({ value: [s] } = await conn.getSignatureStatuses([sig], { searchTransactionHistory: true }));
+        if (!s) throw new SubmittedTransactionError(sig, lastValidBlockHeight, 'expired', 'The transaction expired before it confirmed (blockhash expired).');
+        if (s.confirmationStatus !== 'confirmed' && s.confirmationStatus !== 'finalized') {
+          throw new SubmittedTransactionError(sig, lastValidBlockHeight, 'unknown', 'The transaction is still awaiting confirmation.');
+        }
+      }
+      if (s.err) throw new SubmittedTransactionError(sig, lastValidBlockHeight, 'failed', `The transaction failed on-chain: ${JSON.stringify(s.err)}`);
+      return;
+    }
+    throw new SubmittedTransactionError(sig, lastValidBlockHeight, 'unknown', 'Timed out waiting for the transaction to confirm. Check its status before trying again.');
+  } catch (e) {
+    if (e instanceof SubmittedTransactionError) throw e;
+    throw new SubmittedTransactionError(sig, lastValidBlockHeight, 'unknown', 'Could not determine whether the submitted transaction confirmed.', { cause: e });
   }
-  throw new Error('Timed out waiting for the transaction to confirm. Check the explorer before trying again.');
 }
 
-export type Step = (label: string, sig?: string) => void;
+export type Step = (label: string, sig?: string, lastValidBlockHeight?: number) => void;
 
 /** Build, simulate, sign with the wallet, send and wait for confirmation. Returns the signature. */
 export async function run(
@@ -69,7 +86,12 @@ export async function run(
   await simulate(conn, tx);
   opts.step?.(opts.label ?? 'Confirm in your wallet…');
   const sig = await w.sendTransaction(tx, conn, { signers: opts.signers, skipPreflight: true });
-  opts.step?.('Confirming on Solana…', sig);
-  await confirm(conn, sig, lastValidBlockHeight);
+  try {
+    opts.step?.('Confirming on Solana…', sig, lastValidBlockHeight);
+    await confirm(conn, sig, lastValidBlockHeight);
+  } catch (e) {
+    if (e instanceof SubmittedTransactionError) throw e;
+    throw new SubmittedTransactionError(sig, lastValidBlockHeight, 'unknown', 'The transaction was submitted, but confirmation could not complete.', { cause: e });
+  }
   return sig;
 }
