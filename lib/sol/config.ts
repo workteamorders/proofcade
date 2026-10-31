@@ -15,7 +15,18 @@ export const IS_TEST = CLUSTER !== 'mainnet-beta';
 export const NETWORK_NAME = IS_TEST ? 'Solana Devnet' : 'Solana';
 export const PUBLIC_RPC_URL = env(process.env.NEXT_PUBLIC_SOLANA_RPC_URL, '');
 /** The RPC endpoint the browser should use. */
-export const rpcEndpoint = () => PUBLIC_RPC_URL || (typeof window !== 'undefined' ? `${window.location.origin}/api/rpc` : clusterApiUrl(CLUSTER));
+/*
+ * The wallet adapter decides which network a wallet signs for from the RPC URL alone: "devnet" in the URL means
+ * Devnet, anything unrecognised means MAINNET. The query string keeps "devnet" in our own proxy URL.
+ */
+export const rpcEndpoint = () => PUBLIC_RPC_URL || (typeof window !== 'undefined' ? `${window.location.origin}/api/rpc?cluster=${CLUSTER}` : clusterApiUrl(CLUSTER));
+/** The cluster a wallet adapter will assume for an RPC URL (same rules as @solana/wallet-standard-util). */
+export const endpointCluster = (endpoint: string): Cluster | 'testnet' | 'localnet' =>
+  endpoint.includes('https://api.mainnet-beta.solana.com') ? 'mainnet-beta'
+    : /\bdevnet\b/i.test(endpoint) ? 'devnet'
+    : /\btestnet\b/i.test(endpoint) ? 'testnet'
+    : /\blocalhost\b/i.test(endpoint) || /\b127\.0\.0\.1\b/.test(endpoint) ? 'localnet'
+    : 'mainnet-beta';
 
 export const EXPLORER = 'https://solscan.io';
 const q = IS_TEST ? '?cluster=devnet' : '';

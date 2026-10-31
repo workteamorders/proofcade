@@ -3,7 +3,7 @@ import {
   ComputeBudgetProgram, TransactionMessage, VersionedTransaction,
   type Connection, type Keypair, type PublicKey, type TransactionInstruction,
 } from '@solana/web3.js';
-import { GENESIS_HASH, PRIORITY_MICROLAMPORTS } from './config';
+import { CLUSTER, GENESIS_HASH, PRIORITY_MICROLAMPORTS, endpointCluster } from './config';
 import { SubmittedTransactionError } from './errors';
 
 /** What the wallet adapter's `useWallet()` gives us. */
@@ -80,6 +80,11 @@ export type Step = (label: string, sig?: string, lastValidBlockHeight?: number) 
 export async function run(
   conn: Connection, w: Wallet, ixs: TransactionInstruction[], opts: { units: number; signers?: Keypair[]; step?: Step; label?: string },
 ): Promise<string> {
+  /* a wallet signs for the network its adapter infers from the RPC URL; refuse to ask it for the wrong one */
+  const endpoint = (conn as { rpcEndpoint?: unknown }).rpcEndpoint;
+  if (typeof endpoint === 'string' && endpointCluster(endpoint) !== CLUSTER) {
+    throw new Error(`The RPC address does not say ${CLUSTER}, so your wallet would use another network. Set NEXT_PUBLIC_SOLANA_RPC_URL to a URL that contains "${CLUSTER}", or leave it empty.`);
+  }
   const { tx, lastValidBlockHeight, size } = await buildTx(conn, w.publicKey, ixs, opts.units);
   if (!fits(size)) throw new Error('This transaction is too large for Solana (1232 bytes). Shorten the text and try again.');
   opts.step?.('Checking the transaction…');
