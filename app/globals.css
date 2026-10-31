@@ -76,6 +76,7 @@ button { cursor: pointer; }
 @keyframes blink { 50% { opacity: .35; } }
 .chip b { color: #fff; font-weight: 600; }
 .up { color: var(--mint); } .down { color: var(--loss); }
+.top .wallet, .top .iconbtn, .top .burger { flex-shrink: 0; }
 .burger { display: none; width: 44px; height: 44px; border: 2px solid var(--edge); background: var(--tile); padding: 0; }
 .burger span { display: block; width: 18px; height: 3px; background: #fff; margin: 4px auto; }
 
@@ -369,7 +370,9 @@ footer a:hover { color: var(--coin); }
 footer .demo { margin-top: 18px; padding: 12px 14px; border: 2px dashed var(--edge); color: var(--hero-dim); }
 
 /* ---------- responsive ---------- */
-@media (max-width: 1040px) {
+/* The full nav needs about 1300px (logo, 8 links, network chip, sound, wallet). Below that it folds into the menu,
+   so the wallet button, pinned top right, is never pushed off screen (a browser side panel narrows the page too). */
+@media (max-width: 1320px) {
   .nav, .chip.hide-m { display: none; }
   .burger { display: block; }
   .top .menu.open { display: block; }

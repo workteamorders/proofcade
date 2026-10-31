@@ -37,7 +37,7 @@ export const TAG = PublicKey.findProgramAddressSync([Buffer.from('theorem:launch
 export const MEMO_TAG = 'theorem/1';
 
 /** Compute budget and priority fee for each kind of transaction. */
-export const CU = { launch: 400_000, trade: 250_000, marker: 30_000 } as const;
+export const CU = { launch: 400_000, trade: 250_000, marker: 200_000 } as const;
 export const PRIORITY_MICROLAMPORTS = 20_000;
 
 export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || '').replace(/\/$/, '');
