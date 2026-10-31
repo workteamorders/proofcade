@@ -14,7 +14,11 @@ import { SiteHeader } from '@/components/SiteHeader';
 import { SiteFooter } from '@/components/SiteFooter';
 import { Ticker } from '@/components/Ticker';
 
+/* An absolute base lets Next turn the icon and share-image files in app/ into full URLs for wallets and link previews. */
+const siteUrl = (() => { try { return new URL(process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'); } catch { return new URL('http://localhost:3000'); } })();
+
 export const metadata: Metadata = {
+  metadataBase: siteUrl,
   title: { default: "Theorem", template: "%s · Theorem" },
   description: 'Theorem-backed coins on Solana, in a pixel arcade.',
   robots: process.env.NEXT_PUBLIC_SOLANA_CLUSTER === 'mainnet-beta' ? undefined : { index: false, follow: false },
