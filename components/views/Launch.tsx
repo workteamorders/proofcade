@@ -9,6 +9,7 @@ import { NETWORK_NAME, IS_TEST, txUrl } from '@/lib/sol/config';
 import { BN, NATIVE_MINT, curvePreview, lamportsOf, toTokens, toSol } from '@/lib/sol/pump';
 import { launch as runLaunch, type LaunchState } from '@/lib/sol/launch';
 import { txError } from '@/lib/sol/errors';
+import { RIGOR_ON } from '@/lib/features';
 import { logosEnabled, prepareLogo, uploadLogo } from '@/lib/logoClient';
 
 const STEPS: [string, string, string][] = [
@@ -242,7 +243,7 @@ export function LaunchView() {
                     <div><dt>Pair</dt><dd>SOL (pump.fun curve)</dd></div>
                     <div><dt>First buy</dt><dd>{buyLamports ? `${w.buy} SOL quote; up to ${fmt(toSol(buyLamports) * 1.01)} SOL with 1% slippage` : 'None'}</dd></div>
                     <div><dt>Network fees</dt><dd>Additional SOL is needed for transaction fees and account rent.</dd></div>
-                    <div><dt>Rigor score</dt><dd>An AI estimate appears on the coin after launch. It is not a proof check.</dd></div>
+                    {RIGOR_ON && <div><dt>Rigor score</dt><dd>An AI estimate appears on the coin after launch. It is not a proof check.</dd></div>}
                   </div>
                   {app.market.error && <div className="status bad">Could not read pump.fun from {NETWORK_NAME}. Try again in a moment.</div>}
                   {paused && <div className="status bad">pump.fun has paused new launches on this network.</div>}

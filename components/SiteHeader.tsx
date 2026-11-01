@@ -6,8 +6,9 @@ import { useApp } from '@/lib/app';
 import { coinCanvas } from '@/lib/sprites';
 import { fmt, short } from '@/lib/util';
 import { IS_TEST } from '@/lib/sol/config';
+import { VERIFY_ON } from '@/lib/features';
 
-export const NAV: { href: string; label: string; tag?: string }[] = [
+const ALL_NAV: { href: string; label: string; tag?: string }[] = [
   { href: '/', label: 'Home' },
   { href: '/explore', label: 'Explore' },
   { href: '/launch', label: 'Launch' },
@@ -16,6 +17,7 @@ export const NAV: { href: string; label: string; tag?: string }[] = [
   { href: '/verify', label: 'Verify', tag: 'LEAN' },
   { href: '/arcade', label: 'Arcade' },
 ];
+export const NAV = ALL_NAV.filter((n) => n.href !== '/verify' || VERIFY_ON);
 
 const active = (path: string, href: string) => (href === '/' ? path === '/' : path === href || path.startsWith(href + '/'));
 

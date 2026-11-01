@@ -8,7 +8,7 @@ import { BigCoin, CoinCard, GateNote } from '../ui';
 
 const STEPS = [
   ['01', 'Write the theorem', 'State a claim in math notation when you launch.', 'xⁿ + yⁿ = zⁿ has no solutions for n > 2.'],
-  ['02', 'Review your statement', 'Rigor scoring and formal verification are not available in this beta.', 'UNVERIFIED'],
+  ['02', 'Read before you trade', 'Statements are written by creators and are not verified. A theorem does not make a coin safe.', 'UNVERIFIED'],
   ['03', 'Write it on-chain', 'The statement is recorded in a Solana transaction memo alongside the coin launch.', 'SOLANA MEMO'],
   ['04', 'Trade, then graduate', 'It trades on its pump.fun curve and graduates to PumpSwap when the bar fills.', '████████░░ 80%'],
 ];

@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 import { PHASE, type Coin, type ChatMsg } from '@/lib/data';
 import { sol, usd } from '@/lib/util';
 import { useSolUsd } from '@/lib/price';
+import { RIGOR_ON } from '@/lib/features';
 import { coinCanvas } from '@/lib/sprites';
 import { useApp } from '@/lib/app';
 import { Px } from './Px';
@@ -40,7 +41,7 @@ export function CoinCard({ c, rank, vol }: { c: Coin; rank?: number; vol?: boole
         <span className="cart-names"><b>${c.ticker}</b><span>{c.name}</span></span>
       </span>
       <span className="cart-badges">
-        {c.native ? <RigorBadge r={c.rigor} /> : <span className="badge">PUMP</span>}
+        {c.native ? (RIGOR_ON ? <RigorBadge r={c.rigor} /> : <span className="badge">THEOREM</span>) : <span className="badge">PUMP</span>}
       </span>
       <span className="cart-stmt">{c.native ? c.statement : c.blurb}</span>
       <span className="cart-row">

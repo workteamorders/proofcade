@@ -1,9 +1,11 @@
 'use client';
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { WalletReadyState } from '@solana/wallet-adapter-base';
 import { useApp } from '@/lib/app';
 import { short } from '@/lib/util';
+import { RIGOR_ON } from '@/lib/features';
 import { CLUSTER, IS_TEST, NETWORK_NAME, addressUrl } from '@/lib/sol/config';
 
 export function ConnectDialog({ reason }: { reason?: string }) {
@@ -85,10 +87,11 @@ export function RiskDialog() {
         <ul className="risk-list">
           <li>You can lose everything you put in.</li>
           <li>Coins are issued by their creators, not by Theorem.</li>
-          <li>Rigor scores, when they exist, are an AI estimate, not a proof check.</li>
+          <li>{RIGOR_ON ? 'A coin’s theorem is not checked for truth. Rigor scores are an AI estimate, not a proof check.' : 'A coin’s theorem is not checked for truth, and it does not make a coin safe or valuable.'}</li>
+          <li>Launches and transactions cannot be undone.</li>
           <li>Trades run on the pump.fun program, which Theorem does not control.{IS_TEST ? ' This build runs on Solana devnet.' : ''}</li>
         </ul>
-        <label className="check"><input type="checkbox" checked={ok} onChange={(e) => setOk(e.target.checked)} /><span>I understand these risks and agree to the Terms of Use.</span></label>
+        <label className="check"><input type="checkbox" checked={ok} onChange={(e) => setOk(e.target.checked)} /><span>I understand these risks and have read the <Link href="/risks" target="_blank" rel="noopener">risks and terms</Link>.</span></label>
       </div>
       <div className="dlg-foot">
         <button className="btn ghost" onClick={app.closeDialog}>Cancel</button>

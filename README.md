@@ -51,6 +51,8 @@ Optional services, each switched on by a secret variable and off (with a clear m
 - Custom logos: connect a **Vercel Blob** store (public) to the project; Vercel adds `BLOB_READ_WRITE_TOKEN`. The launch page then offers "Upload an image". The browser crops it to a 256 px square PNG, `/api/logo/<mint>` stores it once (`logos/<mint>.png`) and the launch memo carries `l: 1` so the site knows to load it.
 - Rigor score: set the secret `ANTHROPIC_API_KEY`. `/api/rigor?s=<statement>` asks a Claude model how precisely the statement is written (0 to 100). It is an estimate, not a proof check. Optional: `RIGOR_MODEL` (default `claude-haiku-5-5`) and `RIGOR_DAILY_CAP` (default 300 model calls per server instance per day). Answers are cached in memory and at the CDN.
 
+Features that need a service are hidden unless switched on, so the site never shows a badge or page that does nothing: `NEXT_PUBLIC_FEATURE_RIGOR=1` shows the rigor badge (and needs `ANTHROPIC_API_KEY`), `NEXT_PUBLIC_FEATURE_VERIFY=1` shows the Verify page (needs a Lean 4 checker service, not included). Both are public build-time values: redeploy after changing them. The `/risks` page holds the plain-language risk notice the launch dialog links to; it is not legal advice, so have it reviewed for your jurisdiction before mainnet.
+
 Not connected (needs a backend that does not exist here): Lean verification and its reward pool, shared callouts. Launches feed the Live page; callouts you post stay in your browser.
 The arcade games are standalone.
 

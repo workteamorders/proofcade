@@ -5,6 +5,7 @@ import { useApp } from '@/lib/app';
 import { PHASE, type Coin } from '@/lib/data';
 import { sol, fmt, usd } from '@/lib/util';
 import { useSolUsd } from '@/lib/price';
+import { RIGOR_ON } from '@/lib/features';
 import { changeColor, CoinCard, HpBar, RigorBadge } from '../ui';
 import { Px } from '../Px';
 import Link from 'next/link';
@@ -69,12 +70,12 @@ export function ExploreView() {
       ) : (
         <div className="screen scroll-x">
           <table className="list">
-            <thead><tr><th>Coin</th><th>Rigor</th><th className="r">Price</th><th className="r">Since launch</th><th className="r">MCap</th><th className="r">Raised</th><th>Graduation</th><th className="r">Age</th></tr></thead>
+            <thead><tr><th>Coin</th>{RIGOR_ON && <th>Rigor</th>}<th className="r">Price</th><th className="r">Since launch</th><th className="r">MCap</th><th className="r">Raised</th><th>Graduation</th><th className="r">Age</th></tr></thead>
             <tbody>
               {items.map((c) => (
                 <tr key={c.id} tabIndex={0} onClick={() => router.push(`/coin/${c.id}`)} onKeyDown={(e) => { if (e.key === 'Enter') router.push(`/coin/${c.id}`); }}>
                   <td><span className="cell-coin"><Px seed={c.id} logo={c.logo} /><b>${c.ticker}</b></span></td>
-                  <td>{c.native ? <RigorBadge r={c.rigor} /> : '—'}</td>
+                  {RIGOR_ON && <td>{c.native ? <RigorBadge r={c.rigor} /> : '—'}</td>}
                   <td className="r">{fmt(c.price)}</td>
                   <td className="r" style={{ color: changeColor(c.change) }}>{c.change >= 0 ? '+' : ''}{c.change.toFixed(1)}%</td>
                   <td className="r">{usd(c.mcap)}</td>
