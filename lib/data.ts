@@ -7,8 +7,12 @@ export type Coin = {
   statement?: string;
   /** Plain description for coins that came from the wider pump.fun market. */
   blurb?: string;
+  /** The creator stored a custom logo for this coin. */
+  logo?: boolean;
   /** AI rigor estimate 0–100. Not a proof check. */
   rigor: number | null;
+  /** One-sentence reason for the rigor estimate. */
+  rigorNote?: string;
   formal: boolean;
   /** Launched here (has a theorem) vs. other pump.fun coins. */
   native: boolean;

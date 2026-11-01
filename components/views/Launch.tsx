@@ -9,6 +9,7 @@ import { NETWORK_NAME, IS_TEST, txUrl } from '@/lib/sol/config';
 import { BN, NATIVE_MINT, curvePreview, lamportsOf, toTokens, toSol } from '@/lib/sol/pump';
 import { launch as runLaunch, type LaunchState } from '@/lib/sol/launch';
 import { txError } from '@/lib/sol/errors';
+import { logosEnabled, prepareLogo, uploadLogo } from '@/lib/logoClient';
 
 const STEPS: [string, string, string][] = [
   ['Identity', 'Name your coin', 'Pick a name, ticker and sprite. They can never be changed after launch.'],
@@ -41,7 +42,7 @@ type Phase = { i: number; err?: string };
 const LSTEPS = ['Reading pump.fun launch terms', 'Waiting for your signature', 'Confirming on ' + NETWORK_NAME, 'Opening the new coin'];
 
 /** The real launch: build, simulate, sign, confirm. */
-function LaunchProgress({ form, mint, onDone }: { form: Form; mint: Keypair; onDone: (token: string, tx: string) => void }) {
+function LaunchProgress({ form, mint, logo, onDone }: { form: Form; mint: Keypair; logo: Blob | null; onDone: (token: string, tx: string) => void }) {
   const app = useApp();
   const [p, setP] = useState<Phase>({ i: 0 });
   const [tx, setTx] = useState<string | null>(null);
@@ -49,6 +50,7 @@ function LaunchProgress({ form, mint, onDone }: { form: Form; mint: Keypair; onD
   /* React strict mode runs effects twice in development; a wallet flow must start once per attempt. */
   const started = useRef(-1);
   const done = useRef<LaunchState>({}); /* what is already on-chain, so "try again" resumes */
+  const logoStored = useRef(false);
   const { conn, signer, refresh } = app;
   const partial = !!(done.current.pending || done.current.created);
   useEffect(() => {
@@ -66,7 +68,9 @@ function LaunchProgress({ form, mint, onDone }: { form: Form; mint: Keypair; onD
       if (!signer) throw new Error('Connect a wallet first.');
       setP({ i: 0 });
       const devBuy = form.buy.trim() ? lamportsOf(form.buy) : null;
-      const r = await runLaunch(conn, signer, { name: form.name.trim(), symbol: form.ticker.trim().toUpperCase(), statement: form.stmt.trim(), devBuy, mint, slippagePct: 1 }, (label, sig) => {
+      /* the logo goes up first: the address is fresh and unused, and the launch memo then says the coin has one */
+      if (logo && !logoStored.current && !done.current.marker) { await uploadLogo(mint.publicKey.toBase58(), logo); logoStored.current = true; }
+      const r = await runLaunch(conn, signer, { name: form.name.trim(), symbol: form.ticker.trim().toUpperCase(), statement: form.stmt.trim(), devBuy, mint, slippagePct: 1, logo: !!logo }, (label, sig) => {
         if (sig) setTx(sig);
         setP({ i: sig ? 2 : /wallet/i.test(label) ? 1 : 0 });
       }, done.current);
@@ -123,6 +127,15 @@ export function LaunchView() {
   const [tried, setTried] = useState(false);
   /* The coin's address is chosen now, so the sprite you roll is the sprite the coin keeps. */
   const [mint, setMint] = useState<Keypair | null>(null);
+  const [logo, setLogo] = useState<{ blob: Blob; url: string } | null>(null);
+  const [logoOn, setLogoOn] = useState(false);
+  const [logoErr, setLogoErr] = useState('');
+  useEffect(() => { void logosEnabled().then(setLogoOn); }, []);
+  useEffect(() => () => { if (logo) URL.revokeObjectURL(logo.url); }, [logo]);
+  const pickLogo = async (file: File | undefined) => {
+    if (!file) return;
+    try { const blob = await prepareLogo(file); setLogo({ blob, url: URL.createObjectURL(blob) }); setLogoErr(''); } catch (e) { setLogoErr(e instanceof Error ? e.message : 'That image could not be used.'); }
+  };
   useEffect(() => { setMint(Keypair.generate()); }, []); /* after mount: a random key during render would not match the server's HTML */
   const mintStr = mint?.publicKey.toBase58() ?? '';
   const g = app.pump?.global ?? null;
@@ -139,8 +152,8 @@ export function LaunchView() {
     app.showDialog({
       title: 'Launching…',
       locked: true,
-      node: <LaunchProgress form={snapshot} mint={key} onDone={(token, tx) => {
-        setW(EMPTY); setMint(Keypair.generate()); setStep(0); setTried(false);
+      node: <LaunchProgress form={snapshot} mint={key} logo={logo?.blob ?? null} onDone={(token, tx) => {
+        setW(EMPTY); setLogo(null); setMint(Keypair.generate()); setStep(0); setTried(false);
         app.toast('LEVEL CLEAR', `$${snapshot.ticker.toUpperCase()} launched.`);
         app.showDialog({ title: 'LEVEL CLEAR', node: <LaunchDone ticker={snapshot.ticker.toUpperCase()} token={token} tx={tx} /> });
       }} />,
@@ -183,10 +196,15 @@ export function LaunchView() {
                     <span className="label">Logo</span>
                     <div className="drop">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      {mint ? <img className="px" src={`/api/sprite/${mintStr}`} alt="Logo preview" width={88} height={88} /> : <span style={{ width: 88, height: 88, display: 'inline-block' }} />}
+                      {logo ? <img className="px" src={logo.url} alt="Logo preview" width={88} height={88} /> : mint ? <img className="px" src={`/api/sprite/${mintStr}`} alt="Logo preview" width={88} height={88} /> : <span style={{ width: 88, height: 88, display: 'inline-block' }} />}
                       <div style={{ display: 'grid', gap: 10 }}>
-                        <button className="btn sm ghost" type="button" onClick={() => setMint(Keypair.generate())}>Roll a sprite</button>
-                        <small className="mono muted">The sprite is drawn from the coin&apos;s address ({mint ? short(mintStr) : '…'}), so rolling picks a new address. Custom images need a hosting service.</small>
+                        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                          {!logo && <button className="btn sm ghost" type="button" onClick={() => setMint(Keypair.generate())}>Roll a sprite</button>}
+                          {logoOn && <label className="btn sm ghost" style={{ cursor: 'pointer' }}>{logo ? 'Choose another image' : 'Upload an image'}<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden onChange={(e) => { void pickLogo(e.target.files?.[0]); e.target.value = ''; }} /></label>}
+                          {logo && <button className="btn sm ghost" type="button" onClick={() => setLogo(null)}>Use the sprite</button>}
+                        </div>
+                        {logoErr && <small className="err">{logoErr}</small>}
+                        <small className="mono muted">{logo ? 'Your image is cropped to a square and stored when you launch. It cannot be changed afterwards.' : logoOn ? `Or keep the pixel sprite, drawn from the coin's address (${mint ? short(mintStr) : '…'}); rolling picks a new address.` : `The sprite is drawn from the coin's address (${mint ? short(mintStr) : '…'}), so rolling picks a new address.`}</small>
                       </div>
                     </div>
                   </div>
@@ -219,11 +237,12 @@ export function LaunchView() {
                 <>
                   <div className="review">
                     <div><dt>Name</dt><dd>{w.name}</dd></div><div><dt>Ticker</dt><dd>${w.ticker.toUpperCase()}</dd></div><div><dt>Theorem</dt><dd>{w.stmt}</dd></div>
+                    <div><dt>Logo</dt><dd>{logo ? 'Your image' : 'Pixel sprite'}</dd></div>
                     <div><dt>Address</dt><dd className="mono">{mint ? short(mintStr) : '…'}</dd></div>
                     <div><dt>Pair</dt><dd>SOL (pump.fun curve)</dd></div>
                     <div><dt>First buy</dt><dd>{buyLamports ? `${w.buy} SOL quote; up to ${fmt(toSol(buyLamports) * 1.01)} SOL with 1% slippage` : 'None'}</dd></div>
                     <div><dt>Network fees</dt><dd>Additional SOL is needed for transaction fees and account rent.</dd></div>
-                    <div><dt>Rigor score</dt><dd>Not scored (needs the Theorem service)</dd></div>
+                    <div><dt>Rigor score</dt><dd>An AI estimate appears on the coin after launch. It is not a proof check.</dd></div>
                   </div>
                   {app.market.error && <div className="status bad">Could not read pump.fun from {NETWORK_NAME}. Try again in a moment.</div>}
                   {paused && <div className="status bad">pump.fun has paused new launches on this network.</div>}

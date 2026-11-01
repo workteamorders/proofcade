@@ -9,6 +9,7 @@ import { audio, sfx } from '@/lib/audio';
 import { short } from '@/lib/util';
 import { ago, readCostBasis, readHoldings, readMarket, type Market } from '@/lib/sol/market';
 import type { Wallet } from '@/lib/sol/tx';
+import { useRigor } from '@/lib/rigorClient';
 import { AccountDialog, ConnectDialog, RiskDialog } from './dialogs';
 
 type Toast = { id: number; title: string; text: string };
@@ -140,7 +141,13 @@ export function Providers({ children }: { children: ReactNode }) {
   });
   const holdings = useMemo(() => (connected ? holdQ.data ?? {} : {}), [connected, holdQ.data]);
   const costBasis = useMemo(() => (connected ? costQ.data ?? {} : {}), [connected, costQ.data]);
-  const myCoins = useMemo(() => coins.map((c) => (address && c.creator === address ? { ...c, mine: true } : c)), [coins, address]);
+  const statements = useMemo(() => coins.flatMap((c) => (c.statement ? [c.statement] : [])), [coins]);
+  const rigor = useRigor(statements);
+  const myCoins = useMemo(() => coins.map((c) => {
+    const r = c.statement ? rigor[c.statement] : undefined;
+    const scored = r ? { ...c, rigor: r.score, rigorNote: r.reason } : c;
+    return address && c.creator === address ? { ...scored, mine: true } : scored;
+  }), [coins, address, rigor]);
   const getCoin = useCallback((id: string) => myCoins.find((c) => c.id === id), [myCoins]);
 
   const refresh = useCallback(async () => {

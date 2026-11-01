@@ -17,8 +17,9 @@ export function fmt(v: number): string {
 
 export const sol = (v: number) => `${fmt(v)} SOL`;
 
-/** Sample SOL/USD rate used to show market caps in dollars. Set NEXT_PUBLIC_SOL_USD, or wire a price feed, for production. */
-export const SOL_USD = Number(process.env.NEXT_PUBLIC_SOL_USD || 150);
+/** SOL/USD rate used to show market caps in dollars. Starts at NEXT_PUBLIC_SOL_USD (default 150) and is replaced by the live price once /api/price answers (see lib/price.ts). */
+export let SOL_USD = Number(process.env.NEXT_PUBLIC_SOL_USD || 150);
+export const setSolUsd = (v: number) => { if (Number.isFinite(v) && v > 0) SOL_USD = v; };
 /** Market cap (given in SOL) as a compact dollar amount, e.g. $12.6K or $1.2M. */
 export const usd = (solValue: number) => {
   const d = solValue * SOL_USD;

@@ -6,7 +6,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ mint: string }>
   const name = (u.searchParams.get('n') || 'Theorem coin').slice(0, 32);
   const symbol = (u.searchParams.get('s') || 'THM').slice(0, 10);
   return Response.json(
-    { name, symbol, description: 'A theorem-backed coin launched on Theorem. The statement is stored on-chain with the launch.', image: `${u.origin}/api/sprite/${mint}`, external_url: `${u.origin}/coin/${mint}` },
+    { name, symbol, description: 'A theorem-backed coin launched on Theorem. The statement is stored on-chain with the launch.', image: u.searchParams.get('l') === '1' ? `${u.origin}/api/logo/${mint}` : `${u.origin}/api/sprite/${mint}`, external_url: `${u.origin}/coin/${mint}` },
     { headers: { 'cache-control': 'public, max-age=3600', 'access-control-allow-origin': '*' } },
   );
 }

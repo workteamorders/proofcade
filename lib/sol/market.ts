@@ -15,7 +15,7 @@ export function ago(ts: number, now = Date.now() / 1000): string {
 }
 
 /* ---------------- types ---------------- */
-type Known = { id: string; curve: string; creator: string; name: string; symbol: string; statement: string; created: number; order: number };
+type Known = { id: string; curve: string; creator: string; name: string; symbol: string; statement: string; logo?: boolean; created: number; order: number };
 export type Market = {
   coins: Coin[];
   global: Global;
@@ -29,7 +29,7 @@ export type Market = {
 export type Trade = { sig: string; coin: string; side: 'buy' | 'sell'; trader: string; sol: number; tokens: number; price: number; time: number | null };
 
 /* ---------------- launches ---------------- */
-type Memo = { t: string; m: string; n: string; s: string; x: string };
+type Memo = { t: string; m: string; n: string; s: string; x: string; l?: 1 };
 type PendingLaunch = { memo: Memo; payer: string; time: number; i: number };
 const PENDING_SECONDS = 3600;
 
@@ -44,7 +44,8 @@ function readLaunch(tx: ParsedTransactionWithMeta | null): { memo: Memo; payer: 
     if (p.program !== 'spl-memo' || typeof p.parsed !== 'string') continue;
     try {
       const memo = JSON.parse(p.parsed);
-      if (!memo || typeof memo !== 'object' || Array.isArray(memo) || Object.keys(memo).length !== 5) continue;
+      if (!memo || typeof memo !== 'object' || Array.isArray(memo) || Object.keys(memo).length !== (memo.l === undefined ? 5 : 6)) continue;
+      if (memo.l !== undefined && memo.l !== 1) continue;
       if (memo.t !== MEMO_TAG || typeof memo.m !== 'string' || typeof memo.n !== 'string' || typeof memo.s !== 'string' || typeof memo.x !== 'string') continue;
       if (new PublicKey(memo.m).toBase58() !== memo.m) continue;
       if (!memo.n.trim() || Buffer.byteLength(memo.n, 'utf8') > 32 || !/^[a-zA-Z0-9]{2,10}$/.test(memo.s)) continue;
@@ -106,7 +107,7 @@ export async function readMarket(conn: Connection, prev?: Market): Promise<Marke
       delete pending[key];
       /* the coin must belong to the wallet that paid for the launch, or the memo is someone else's */
       if (c.creator.toBase58() !== f.payer) return;
-      known[m] = { id: m, curve: bondingCurvePda(m).toBase58(), creator: f.payer, name: f.memo.n, symbol: f.memo.s, statement: f.memo.x, created: f.time, order: f.time * 1000 + f.i };
+      known[m] = { id: m, curve: bondingCurvePda(m).toBase58(), creator: f.payer, name: f.memo.n, symbol: f.memo.s, statement: f.memo.x, logo: f.memo.l === 1, created: f.time, order: f.time * 1000 + f.i };
     });
   }
 
@@ -119,7 +120,7 @@ export async function readMarket(conn: Connection, prev?: Market): Promise<Marke
     const c = state[i]; if (!c) return [];
     const price = priceOf(c);
     return [{
-      id: k.id, ticker: k.symbol, name: k.name, statement: k.statement, rigor: null, formal: false, native: true,
+      id: k.id, ticker: k.symbol, name: k.name, statement: k.statement, logo: k.logo, rigor: null, formal: false, native: true,
       mcap: price * toTokens(c.tokenTotalSupply), raised: toSol(c.realQuoteReserves), progress: progressOf(c, global), age: ago(k.created, now),
       change: launchPrice > 0 ? (price / launchPrice - 1) * 100 : 0,
       address: k.id, creator: k.creator, price, phase: c.complete ? 1 : 0, order: k.order, curve: k.curve, created: k.created, launchPrice,

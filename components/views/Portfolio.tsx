@@ -4,10 +4,12 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { useApp } from '@/lib/app';
 import { sol, fmt, short, usd } from '@/lib/util';
+import { useSolUsd } from '@/lib/price';
 import { changeColor } from '../ui';
 import { Px } from '../Px';
 
 export function PortfolioView() {
+  useSolUsd();
   const app = useApp();
   const router = useRouter();
   const [tab, setTab] = useState<'holdings' | 'launches'>('holdings');
@@ -54,7 +56,7 @@ export function PortfolioView() {
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.c.id} tabIndex={0} onClick={() => router.push(`/coin/${r.c.id}`)} onKeyDown={(e) => { if (e.key === 'Enter') router.push(`/coin/${r.c.id}`); }}>
-                    <td><span className="cell-coin"><Px seed={r.c.id} /><b>${r.c.ticker}</b></span></td>
+                    <td><span className="cell-coin"><Px seed={r.c.id} logo={r.c.logo} /><b>${r.c.ticker}</b></span></td>
                     <td className="r">{fmt(r.bal)}</td><td className="r">{sol(r.val)}</td>
                     <td className="r" style={{ color: changeColor(r.pnl) }}>{r.pnl >= 0 ? '+' : ''}{fmt(r.pnl)} <small>{r.pct.toFixed(1)}%</small></td>
                     <td className="r"><span className="btn sm ghost">Open</span></td>
@@ -67,7 +69,7 @@ export function PortfolioView() {
           <div className="tabpanel">
             {mine.length ? (
               <div className="scroll-x"><table className="list"><thead><tr><th>Coin</th><th className="r">MCap</th><th className="r">Age</th></tr></thead>
-                <tbody>{mine.map((c) => <tr key={c.id} tabIndex={0} onClick={() => router.push(`/coin/${c.id}`)}><td><span className="cell-coin"><Px seed={c.id} /><b>${c.ticker}</b></span></td><td className="r">{usd(c.mcap)}</td><td className="r">{c.age}</td></tr>)}</tbody></table></div>
+                <tbody>{mine.map((c) => <tr key={c.id} tabIndex={0} onClick={() => router.push(`/coin/${c.id}`)}><td><span className="cell-coin"><Px seed={c.id} logo={c.logo} /><b>${c.ticker}</b></span></td><td className="r">{usd(c.mcap)}</td><td className="r">{c.age}</td></tr>)}</tbody></table></div>
             ) : (<p className="muted">You haven&apos;t launched a coin yet. <Link href="/launch" style={{ color: 'var(--ink)' }}>Start a launch →</Link></p>)}
           </div>
         )}

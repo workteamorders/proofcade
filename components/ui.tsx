@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { useEffect, useRef } from 'react';
 import { PHASE, type Coin, type ChatMsg } from '@/lib/data';
 import { sol, usd } from '@/lib/util';
+import { useSolUsd } from '@/lib/price';
 import { coinCanvas } from '@/lib/sprites';
 import { useApp } from '@/lib/app';
 import { Px } from './Px';
@@ -29,12 +30,13 @@ export function HpBar({ p }: { p: number }) {
 export const changeColor = (v: number) => (v >= 0 ? 'var(--mint-ink)' : 'var(--loss-ink)');
 
 export function CoinCard({ c, rank, vol }: { c: Coin; rank?: number; vol?: boolean }) {
+  useSolUsd();
   return (
     <Link href={`/coin/${c.id}`} className="cart" aria-label={`$${c.ticker} ${c.name}`}>
       {rank ? <span className="rank">#{rank}</span> : null}
       <span className="start">PRESS START</span>
       <span className="cart-head">
-        <Px seed={c.id} />
+        <Px seed={c.id} logo={c.logo} />
         <span className="cart-names"><b>${c.ticker}</b><span>{c.name}</span></span>
       </span>
       <span className="cart-badges">

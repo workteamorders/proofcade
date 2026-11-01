@@ -6,6 +6,7 @@ import { PublicKey } from '@solana/web3.js';
 import { useApp } from '@/lib/app';
 import { PHASE, type Coin } from '@/lib/data';
 import { sol, fmt, short, usd } from '@/lib/util';
+import { useSolUsd } from '@/lib/price';
 import { addressUrl, tokenUrl, txUrl } from '@/lib/sol/config';
 import { ago, readTrades, type Trade } from '@/lib/sol/market';
 import { BN, PUMP_SDK, bondingCurvePda, lamportsOf, quoteBuy, quoteSell, rawOf, toSol, toTokens } from '@/lib/sol/pump';
@@ -256,13 +257,14 @@ function TabPanel({ c, tab, trades }: { c: Coin; tab: string; trades: ReturnType
   return (
     <>
       <div className="theorem screen" style={{ boxShadow: 'none', borderWidth: '0 0 0 10px', borderColor: 'var(--coin)' }}><small>Theorem</small>{c.statement}</div>
-      <p className="muted">Rigor <RigorBadge r={c.rigor} /> Not scored: rigor scoring and Lean verification need the Theorem service, which isn&apos;t connected to this build.</p>
+      <p className="muted">Rigor <RigorBadge r={c.rigor} /> {c.rigor == null ? 'Not scored yet. Scores are AI estimates of how precisely a statement is written.' : `${c.rigorNote ? c.rigorNote + ' ' : ''}An AI estimate of how precisely the statement is written. It is not a proof check.`} Lean verification is not available in this build.</p>
     </>
   );
 }
 
 /* ---------------- page ---------------- */
 export function CoinView({ id }: { id: string }) {
+  useSolUsd();
   const app = useApp();
   const c = app.getCoin(id);
   const [iv, setIv] = useState<Interval>('5m');
@@ -293,7 +295,7 @@ function CoinPage({ c, iv, setIv, tab, setTab }: { c: Coin; iv: Interval; setIv:
       <div className="detail">
         <div className="detail-main">
           <div className="coin-head">
-            <Px seed={c.id} large />
+            <Px seed={c.id} logo={c.logo} large />
             <div>
               <h1>${c.ticker} <span className="muted" style={{ color: 'var(--hero-dim)', fontSize: '.6em' }}>{c.name}</span></h1>
               <div className="sub">{c.native ? c.statement : c.blurb}</div>

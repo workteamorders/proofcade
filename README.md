@@ -45,13 +45,17 @@ The app talks to the real pump.fun program (`6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M
 - Trades and charts: parsed from the balance changes of each curve's transactions. "Raised" is SOL in the curve; change is since launch.
 - Buy and sell: `buyInstructions` / `sellInstructions`; every transaction is simulated before the wallet is asked to sign.
 - Launch: `create_v2` (Token-2022), with the first buy in the same transaction when it fits. The coin's sprite is drawn from its mint address and its metadata is served from `/api/meta/<mint>`, so the site must be reachable at a public URL (`NEXT_PUBLIC_SITE_URL`) for wallets to show names and images.
-- Market caps and balances show in USD using `NEXT_PUBLIC_SOL_USD` (a fixed sample rate, not a live price).
+- Market caps show in USD using the live SOL price from `/api/price` (Pyth, then CoinGecko, then Coinbase; cached 60s on the server). If every feed is unreachable it falls back to `NEXT_PUBLIC_SOL_USD`, and the footer says it is a sample rate.
 
-Not connected (needs a backend that does not exist here): rigor scores, Lean verification and its reward pool, custom logo upload, shared callouts. Launches feed the Live page; callouts you post stay in your browser.
+Optional services, each switched on by a secret variable and off (with a clear message) when it is missing:
+- Custom logos: connect a **Vercel Blob** store (public) to the project; Vercel adds `BLOB_READ_WRITE_TOKEN`. The launch page then offers "Upload an image". The browser crops it to a 256 px square PNG, `/api/logo/<mint>` stores it once (`logos/<mint>.png`) and the launch memo carries `l: 1` so the site knows to load it.
+- Rigor score: set the secret `ANTHROPIC_API_KEY`. `/api/rigor?s=<statement>` asks a Claude model how precisely the statement is written (0 to 100). It is an estimate, not a proof check. Optional: `RIGOR_MODEL` (default `claude-haiku-5-5`) and `RIGOR_DAILY_CAP` (default 300 model calls per server instance per day). Answers are cached in memory and at the CDN.
+
+Not connected (needs a backend that does not exist here): Lean verification and its reward pool, shared callouts. Launches feed the Live page; callouts you post stay in your browser.
 The arcade games are standalone.
 
 Not yet tested against a live cluster: the code was checked with a mock RPC only. Try a small devnet launch and trade before moving to mainnet.
-Rigor scores, when they exist, are AI estimates, not proof checks.
+Rigor scores are AI estimates, not proof checks.
 
 ## Vercel Devnet beta
 
@@ -62,7 +66,7 @@ The intended beta origin is `https://theorem-pi.vercel.app`. In Vercel Project S
 | `NEXT_PUBLIC_SOLANA_CLUSTER` | `devnet` |
 | `NEXT_PUBLIC_SITE_URL` | `https://theorem-pi.vercel.app` |
 | `SOLANA_RPC_URL` | The complete HTTPS URL of your **Devnet** RPC provider, kept secret |
-| `NEXT_PUBLIC_SOL_USD` | `150` (sample display rate, not a market feed) |
+| `NEXT_PUBLIC_SOL_USD` | `150` (fallback display rate, used only when no live feed answers) |
 
 Leave `NEXT_PUBLIC_SOLANA_RPC_URL` unset to use the server proxy. Next.js does not load `.env.public.local` or `.env.secret.local`; use `.env.local` for local development and Vercel-managed environment variables for deployment. Do not commit secrets. `NEXT_PUBLIC_*` values are baked into the build: redeploy after changing them.
 

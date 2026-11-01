@@ -7,14 +7,15 @@ import { buildTx, confirm, fits, run, type Step, type Wallet } from './tx';
 import { SubmittedTransactionError } from './errors';
 import * as trade from './trade';
 
-export type LaunchInput = { name: string; symbol: string; statement: string; devBuy: BN | null; mint: Keypair; slippagePct: number };
+export type LaunchInput = { name: string; symbol: string; statement: string; devBuy: BN | null; mint: Keypair; slippagePct: number; /** A custom logo was stored for this coin. */ logo?: boolean };
 
 /** Metadata URI stored in the coin: a tiny route on this site that serves name, symbol and the sprite. */
-export function metadataUri(mint: PublicKey, name: string, symbol: string): string {
+export function metadataUri(mint: PublicKey, name: string, symbol: string, logo = false): string {
   const origin = SITE_URL || (typeof window !== 'undefined' ? window.location.origin : '');
-  const full = `${origin}/api/meta/${mint.toBase58()}?n=${encodeURIComponent(name)}&s=${encodeURIComponent(symbol)}`;
+  const l = logo ? '&l=1' : '';
+  const full = `${origin}/api/meta/${mint.toBase58()}?n=${encodeURIComponent(name)}&s=${encodeURIComponent(symbol)}${l}`;
   /* the metadata program caps the URI at 200 bytes */
-  return full.length <= 200 ? full : `${origin}/api/meta/${mint.toBase58()}`;
+  return full.length <= 200 ? full : `${origin}/api/meta/${mint.toBase58()}${logo ? '?l=1' : ''}`;
 }
 
 /**
@@ -22,7 +23,7 @@ export function metadataUri(mint: PublicKey, name: string, symbol: string): stri
  * The tag key rides on a zero-lamport self transfer, the way Solana Pay attaches a reference.
  */
 export function marker(user: PublicKey, input: LaunchInput): TransactionInstruction[] {
-  const memo = JSON.stringify({ t: MEMO_TAG, m: input.mint.publicKey.toBase58(), n: input.name, s: input.symbol, x: input.statement });
+  const memo = JSON.stringify({ t: MEMO_TAG, m: input.mint.publicKey.toBase58(), n: input.name, s: input.symbol, x: input.statement, ...(input.logo ? { l: 1 } : {}) });
   const tag = SystemProgram.transfer({ fromPubkey: user, toPubkey: user, lamports: 0 });
   tag.keys.push({ pubkey: TAG, isSigner: false, isWritable: false });
   return [new TransactionInstruction({ programId: MEMO_PROGRAM_ID, keys: [], data: Buffer.from(memo, 'utf8') }), tag];
@@ -84,7 +85,7 @@ export async function launch(conn: Connection, w: Wallet, input: LaunchInput, st
     const [global, feeConfig] = await Promise.all([sdk.fetchGlobal(), sdk.fetchFeeConfig().catch(() => null)]);
     if (!global.createV2Enabled) throw new Error('pump.fun has paused new launches on this cluster.');
     const mint = input.mint.publicKey, user = w.publicKey;
-    const uri = metadataUri(mint, input.name, input.symbol);
+    const uri = metadataUri(mint, input.name, input.symbol, input.logo);
     const base = { mint, name: input.name, symbol: input.symbol, uri, creator: user, user, mayhemMode: false };
 
     if (!state.marker) {
