@@ -76,7 +76,7 @@ export function PortfolioView() {
       </div>
       <div style={{ marginTop: 18 }}><button className="btn sm ghost" disabled={!rows.length} onClick={() => {
         const csv = ['ticker,token,balance,value_sol,cost_sol', ...rows.map((r) => `${r.c.ticker},${r.c.address},${r.bal},${r.val},${r.cost}`)].join('\n');
-        const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = 'theorem-holdings.csv'; a.click(); URL.revokeObjectURL(a.href);
+        const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = 'theorema-holdings.csv'; a.click(); URL.revokeObjectURL(a.href);
       }}>Export CSV</button></div>
     </>
   );

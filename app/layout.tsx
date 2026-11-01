@@ -19,8 +19,8 @@ const siteUrl = (() => { try { return new URL(process.env.NEXT_PUBLIC_SITE_URL |
 
 export const metadata: Metadata = {
   metadataBase: siteUrl,
-  title: { default: "Theorem", template: "%s · Theorem" },
-  description: 'Theorem-backed coins on Solana, in a pixel arcade.',
+  title: { default: "Theorema", template: "%s · Theorema" },
+  description: 'Coins backed by a theorem, on Solana, in a pixel arcade.',
   robots: process.env.NEXT_PUBLIC_SOLANA_CLUSTER === 'mainnet-beta' ? undefined : { index: false, follow: false },
 };
 

@@ -254,7 +254,7 @@ function TabPanel({ c, tab, trades }: { c: Coin; tab: string; trades: ReturnType
       </dl>
     );
   }
-  if (!c.native) return (<><p className="muted">This coin wasn&apos;t launched on Theorem, so it carries no theorem. Its description:</p><p>{c.blurb}</p></>);
+  if (!c.native) return (<><p className="muted">This coin wasn&apos;t launched on Theorema, so it carries no theorem. Its description:</p><p>{c.blurb}</p></>);
   return (
     <>
       <div className="theorem screen" style={{ boxShadow: 'none', borderWidth: '0 0 0 10px', borderColor: 'var(--coin)' }}><small>Theorem</small>{c.statement}</div>
@@ -304,7 +304,7 @@ function CoinPage({ c, iv, setIv, tab, setTab }: { c: Coin; iv: Interval; setIv:
                 {c.native && RIGOR_ON && <RigorBadge r={c.rigor} />}
                 <div className="share">
                   <button className="btn sm ghost" onClick={() => { void navigator.clipboard?.writeText(location.href).catch(() => {}); app.toast('COPIED', 'Link copied.'); }}>Copy link</button>
-                  <a className="btn sm ghost" href={`https://x.com/intent/post?text=${encodeURIComponent('$' + c.ticker + ' on Theorem')}`} target="_blank" rel="noopener noreferrer">Post on X</a>
+                  <a className="btn sm ghost" href={`https://x.com/intent/post?text=${encodeURIComponent('$' + c.ticker + ' on Theorema')}`} target="_blank" rel="noopener noreferrer">Post on X</a>
                 </div>
               </div>
             </div>

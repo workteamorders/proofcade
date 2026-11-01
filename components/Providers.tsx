@@ -161,7 +161,7 @@ export function Providers({ children }: { children: ReactNode }) {
   const [toastsOn, setToastsOn] = useState(true);
   const sys = useMemo<ChatMsg[]>(() => {
     const now = Date.now() / 1000;
-    return coins.slice().sort((a, b) => b.order - a.order).slice(0, 30).map((c): ChatMsg => ({ id: c.order, kind: 'sys', who: 'THEOREM', text: `$${c.ticker} launched.`, coinId: c.id, ago: `${ago(c.created, now)} ago`, re: { r: 0, e: 0, s: 0 }, me: {} }));
+    return coins.slice().sort((a, b) => b.order - a.order).slice(0, 30).map((c): ChatMsg => ({ id: c.order, kind: 'sys', who: 'THEOREMA', text: `$${c.ticker} launched.`, coinId: c.id, ago: `${ago(c.created, now)} ago`, re: { r: 0, e: 0, s: 0 }, me: {} }));
   }, [coins]);
   const [reacts, setReacts] = useState<Record<number, { me: ChatMsg['me']; re: ChatMsg['re'] }>>({});
   const msgs = useMemo(() => [...posts, ...sys].map((m) => (reacts[m.id] ? { ...m, ...reacts[m.id] } : m)), [posts, sys, reacts]);

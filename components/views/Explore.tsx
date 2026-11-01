@@ -42,7 +42,7 @@ export function ExploreView() {
       <h1 style={{ margin: '14px 0 26px' }}>Explore coins</h1>
       <div className="toolbar on-dark">
         <div className="seg" role="group" aria-label="Collection">
-          <button aria-pressed={tab === 'native'} onClick={() => { setTab('native'); setShown(12); }}>Theorem launches ({nativeCount})</button>
+          <button aria-pressed={tab === 'native'} onClick={() => { setTab('native'); setShown(12); }}>Theorema launches ({nativeCount})</button>
           <button aria-pressed={tab === 'all'} onClick={() => { setTab('all'); setShown(12); }}>All coins</button>
         </div>
         <div className="grow">

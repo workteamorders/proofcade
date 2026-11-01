@@ -9,7 +9,7 @@ let calls;
 const load = () => { delete require.cache[path]; return require(path); };
 const reply = (text, ok = true) => ({ ok, status: ok ? 200 : 500, body: null, json: async () => ({ content: [{ type: 'text', text }] }) });
 const STMT = 'For every even integer n, n squared is even.';
-const get = (route, s = STMT, ip = '1.1.1.1') => route.GET(new Request(`https://theorem-pi.vercel.app/api/rigor?s=${encodeURIComponent(s)}`, { headers: { 'x-forwarded-for': ip } }));
+const get = (route, s = STMT, ip = '1.1.1.1') => route.GET(new Request(`https://theorema.fun/api/rigor?s=${encodeURIComponent(s)}`, { headers: { 'x-forwarded-for': ip } }));
 
 beforeEach(() => { calls = []; process.env.ANTHROPIC_API_KEY = 'test-key'; delete process.env.RIGOR_MODEL; delete process.env.RIGOR_DAILY_CAP; });
 afterEach(() => { global.fetch = realFetch; delete process.env.ANTHROPIC_API_KEY; delete process.env.RIGOR_DAILY_CAP; delete process.env.RIGOR_MODEL; delete require.cache[path]; });

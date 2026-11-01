@@ -31,7 +31,7 @@ export function HomeView() {
     <>
       <section className="hero" aria-labelledby="h">
         <div>
-          <div className="eyebrow"><b>Theorem</b> · Solana · Routed through pump.fun</div>
+          <div className="eyebrow"><b>Theorema</b> · Solana · Routed through pump.fun</div>
           <h1 id="h">Every coin is a level. <span className="hl">Every level is a theorem.</span></h1>
           <p className="lead">Launch a coin with a mathematical statement recorded on Solana. Explore and test trading on pump.fun curves. Statements are not formally verified in this beta.</p>
           <div className="cta">
@@ -64,7 +64,7 @@ export function HomeView() {
       </section>
 
       <section className="section" aria-labelledby="how">
-        <div className="section-head"><div><div className="eyebrow">Theorem board</div><h2 id="how" style={{ marginTop: 12 }}>How a level works</h2></div></div>
+        <div className="section-head"><div><div className="eyebrow">Theorema board</div><h2 id="how" style={{ marginTop: 12 }}>How a level works</h2></div></div>
         <div className="steps">
           {STEPS.map(([n, t, p, e]) => <div className="screen step" key={n}><span className="n">{n}</span><h3>{t}</h3><p>{p}</p><div className="eg">{e}</div></div>)}
         </div>

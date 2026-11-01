@@ -22,7 +22,7 @@ afterEach(() => {
 test('configuration accepts defaults and complete Devnet deployment URLs', () => {
   assert.equal(load().reactStrictMode, true);
   process.env.NEXT_PUBLIC_SOLANA_CLUSTER = 'devnet';
-  process.env.NEXT_PUBLIC_SITE_URL = 'https://theorem-pi.vercel.app';
+  process.env.NEXT_PUBLIC_SITE_URL = 'https://theorema.fun';
   process.env.SOLANA_RPC_URL = 'https://provider.example/?api-key=test';
   assert.equal(load().reactStrictMode, true);
 });

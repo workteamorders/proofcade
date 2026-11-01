@@ -23,10 +23,10 @@ const png = (w, h, extra = 0) => {
   const v = new DataView(b.buffer); v.setUint32(16, w); v.setUint32(20, h);
   return b;
 };
-const put = (body, headers = {}) => new Request(`https://theorem-pi.vercel.app/api/logo/${MINT}`, { method: 'PUT', headers: { origin: 'https://theorem-pi.vercel.app', 'content-type': 'image/png', ...headers }, body });
+const put = (body, headers = {}) => new Request(`https://theorema.fun/api/logo/${MINT}`, { method: 'PUT', headers: { origin: 'https://theorema.fun', 'content-type': 'image/png', ...headers }, body });
 const ctx = { params: Promise.resolve({ mint: MINT }) };
 
-beforeEach(() => { store = new Map(); putOpts = undefined; process.env.BLOB_READ_WRITE_TOKEN = 'test'; process.env.NEXT_PUBLIC_SITE_URL = 'https://theorem-pi.vercel.app'; });
+beforeEach(() => { store = new Map(); putOpts = undefined; process.env.BLOB_READ_WRITE_TOKEN = 'test'; process.env.NEXT_PUBLIC_SITE_URL = 'https://theorema.fun'; });
 afterEach(() => { delete process.env.BLOB_READ_WRITE_TOKEN; delete process.env.NEXT_PUBLIC_SITE_URL; });
 
 test('pngSize reads the header and refuses other bytes', () => {
@@ -93,7 +93,7 @@ test('GET redirects to the stored image, and answers 404 when there is none', as
 
 test('the metadata route points the image at the logo only when the launch says it has one', async () => {
   const meta = require('../app/api/meta/[mint]/route.ts');
-  const get = async (q) => (await meta.GET(new Request(`https://theorem-pi.vercel.app/api/meta/${MINT}${q}`), ctx)).json();
-  assert.equal((await get('?n=A&s=AB')).image, `https://theorem-pi.vercel.app/api/sprite/${MINT}`);
-  assert.equal((await get('?n=A&s=AB&l=1')).image, `https://theorem-pi.vercel.app/api/logo/${MINT}`);
+  const get = async (q) => (await meta.GET(new Request(`https://theorema.fun/api/meta/${MINT}${q}`), ctx)).json();
+  assert.equal((await get('?n=A&s=AB')).image, `https://theorema.fun/api/sprite/${MINT}`);
+  assert.equal((await get('?n=A&s=AB&l=1')).image, `https://theorema.fun/api/logo/${MINT}`);
 });

@@ -14,7 +14,7 @@ import { logosEnabled, prepareLogo, uploadLogo } from '@/lib/logoClient';
 
 const STEPS: [string, string, string][] = [
   ['Identity', 'Name your coin', 'Pick a name, ticker and sprite. They can never be changed after launch.'],
-  ['Theorem', 'State your theorem', 'Every Theorem coin carries a mathematical statement, written on-chain with the launch.'],
+  ['Theorem', 'State your theorem', 'Every Theorema coin carries a mathematical statement, written on-chain with the launch.'],
   ['Economics', 'Set the first buy', 'Coins trade against SOL on a pump.fun bonding curve. You can buy the first tokens yourself, optionally.'],
   ['Review', 'Review and launch', 'Check everything. A launch cannot be undone. Your wallet will ask you to confirm twice (the theorem, then the coin), and a third time if the first buy does not fit.'],
 ];

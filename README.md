@@ -1,6 +1,6 @@
-# Theorem
+# Theorema
 
-Theorem-backed coins on Solana (pump.fun bonding curves), as a pixel arcade. Next.js 16 (App Router), React 19, TypeScript.
+Coins backed by a theorem, on Solana (pump.fun bonding curves), as a pixel arcade. Next.js 16 (App Router), React 19, TypeScript.
 The layout follows the Harmonic Agent site (navy ground, white raised panels, mono labels, one signal colour); the look is arcade.
 
 ```bash
@@ -41,7 +41,7 @@ The app talks to the real pump.fun program (`6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M
 
 - Cluster: `NEXT_PUBLIC_SOLANA_CLUSTER=devnet` (default) or `mainnet-beta`. Solana's separate `testnet` cluster is not supported. The variable also switches the explorer links and the DEVNET chip; changing it alone does not establish mainnet readiness. Put your RPC provider URL in the **secret** `SOLANA_RPC_URL` (server only, no `NEXT_PUBLIC_` prefix): the browser reaches it through this site's `/api/rpc`, which restricts methods and checks the browser origin so the key never reaches the browser. Origin checks are not bot protection: configure provider budgets and edge rate limits before public testing. Public values live in `NEXT_PUBLIC_*`; see `.env.example`.
 - Wallet: Solana wallet adapter with Phantom, Solflare and Wallet Standard auto-detection. For devnet, switch Phantom to Testnet Mode (Settings, Developer Settings) and fund it from a devnet faucet.
-- Coins: every launch carries a Theorem tag account and a memo (mint, name, ticker, statement). The site lists the tag's signatures, checks that the curve exists and that the memo signer is the coin's creator, then reads each bonding curve live (`lib/sol/market.ts`).
+- Coins: every launch carries a Theorema tag account and a memo (mint, name, ticker, statement). The site lists the tag's signatures, checks that the curve exists and that the memo signer is the coin's creator, then reads each bonding curve live (`lib/sol/market.ts`).
 - Trades and charts: parsed from the balance changes of each curve's transactions. "Raised" is SOL in the curve; change is since launch.
 - Buy and sell: `buyInstructions` / `sellInstructions`; every transaction is simulated before the wallet is asked to sign.
 - Launch: `create_v2` (Token-2022), with the first buy in the same transaction when it fits. The coin's sprite is drawn from its mint address and its metadata is served from `/api/meta/<mint>`, so the site must be reachable at a public URL (`NEXT_PUBLIC_SITE_URL`) for wallets to show names and images.
@@ -61,14 +61,20 @@ Rigor scores are AI estimates, not proof checks.
 
 ## Vercel Devnet beta
 
-The intended beta origin is `https://theorem-pi.vercel.app`. In Vercel Project Settings -> Environment Variables, configure the following for the deployment environment serving that domain:
+The beta origin is `https://theorema.fun`. In Vercel Project Settings -> Environment Variables, configure the following for the deployment environment serving that domain:
 
 | Variable | Value |
 | --- | --- |
 | `NEXT_PUBLIC_SOLANA_CLUSTER` | `devnet` |
-| `NEXT_PUBLIC_SITE_URL` | `https://theorem-pi.vercel.app` |
+| `NEXT_PUBLIC_SITE_URL` | `https://theorema.fun` |
 | `SOLANA_RPC_URL` | The complete HTTPS URL of your **Devnet** RPC provider, kept secret |
 | `NEXT_PUBLIC_SOL_USD` | `150` (fallback display rate, used only when no live feed answers) |
+
+### Moving to theorema.fun
+
+1. In Vercel, Project Settings -> Domains: add `theorema.fun` (and `www.theorema.fun` if you want it), set the DNS records Vercel shows at your registrar, and mark `theorema.fun` as the primary domain so other addresses redirect to it.
+2. Set `NEXT_PUBLIC_SITE_URL` to `https://theorema.fun` for Production and Preview, then redeploy. The RPC proxy only answers requests whose `Origin` equals this value, so until it matches, the site on the new domain shows "Forbidden origin" errors.
+3. Launch no coins you mean to keep until the domain is final. A coin's metadata address (name, ticker and image) is written on-chain with `NEXT_PUBLIC_SITE_URL` at launch time and cannot be changed. Coins launched before the switch keep pointing at `theorem-pi.vercel.app`, so leave that address reachable.
 
 Leave `NEXT_PUBLIC_SOLANA_RPC_URL` unset to use the server proxy. Next.js does not load `.env.public.local` or `.env.secret.local`; use `.env.local` for local development and Vercel-managed environment variables for deployment. Do not commit secrets. `NEXT_PUBLIC_*` values are baked into the build: redeploy after changing them.
 

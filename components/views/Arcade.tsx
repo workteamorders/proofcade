@@ -62,7 +62,7 @@ export function ArcadeView() {
 
   return (
     <>
-      <div className="eyebrow">Theorem · {GAME_ORDER.length} cabinets</div>
+      <div className="eyebrow">Theorema · {GAME_ORDER.length} cabinets</div>
       <h1 style={{ margin: '14px 0 14px' }}>Time for a little downtime.</h1>
       <p className="lead" style={{ marginBottom: 26 }}>Six games, no wallet needed. Personal bests stay in this browser. Shared rankings are not available in this beta.</p>
       <div className="cabs">

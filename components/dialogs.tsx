@@ -41,7 +41,7 @@ export function ConnectDialog({ reason }: { reason?: string }) {
   );
   return (
     <div className="dlg-body">
-      <p>{reason || 'Connect a wallet to play.'} Theorem is non-custodial. Your keys never leave your wallet.</p>
+      <p>{reason || 'Connect a wallet to play.'} Theorema is non-custodial. Your keys never leave your wallet.</p>
       <div className="wlist">
         {installed.map((x) => row(x))}
         {!installed.length && others.map((x) => row(x, true))}
@@ -86,10 +86,10 @@ export function RiskDialog() {
         <p>Launching and trading memecoins is highly speculative. Read this once.</p>
         <ul className="risk-list">
           <li>You can lose everything you put in.</li>
-          <li>Coins are issued by their creators, not by Theorem.</li>
+          <li>Coins are issued by their creators, not by Theorema.</li>
           <li>{RIGOR_ON ? 'A coin’s theorem is not checked for truth. Rigor scores are an AI estimate, not a proof check.' : 'A coin’s theorem is not checked for truth, and it does not make a coin safe or valuable.'}</li>
           <li>Launches and transactions cannot be undone.</li>
-          <li>Trades run on the pump.fun program, which Theorem does not control.{IS_TEST ? ' This build runs on Solana devnet.' : ''}</li>
+          <li>Trades run on the pump.fun program, which Theorema does not control.{IS_TEST ? ' This build runs on Solana devnet.' : ''}</li>
         </ul>
         <label className="check"><input type="checkbox" checked={ok} onChange={(e) => setOk(e.target.checked)} /><span>I understand these risks and have read the <Link href="/risks" target="_blank" rel="noopener">risks and terms</Link>.</span></label>
       </div>

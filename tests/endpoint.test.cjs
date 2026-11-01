@@ -4,10 +4,10 @@ const assert = require('node:assert/strict');
 const config = require('../lib/sol/config.ts');
 
 test('the browser RPC URL keeps "devnet" so wallets sign for Devnet, never Mainnet', () => {
-  global.window = { location: { origin: 'https://theorem-pi.vercel.app' } };
+  global.window = { location: { origin: 'https://theorema.fun' } };
   try {
     const url = config.rpcEndpoint();
-    assert.equal(url, 'https://theorem-pi.vercel.app/api/rpc?cluster=devnet');
+    assert.equal(url, 'https://theorema.fun/api/rpc?cluster=devnet');
     assert.equal(config.endpointCluster(url), 'devnet');
   } finally { delete global.window; }
 });

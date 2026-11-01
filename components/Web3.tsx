@@ -24,7 +24,7 @@ function useMetaMask() {
         if (dead) return;
         const net = CLUSTER === 'devnet' ? 'devnet' : 'mainnet';
         return createSolanaClient({
-          dapp: { name: 'Theorem', url: window.location.origin },
+          dapp: { name: 'Theorema', url: window.location.origin },
           api: { supportedNetworks: { [net]: rpcEndpoint() } },
         });
       })

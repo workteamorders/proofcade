@@ -2,9 +2,9 @@ import Link from 'next/link';
 import { IS_TEST } from '@/lib/sol/config';
 
 const SECTIONS: [string, string[]][] = [
-  ['What Theorem is', [
-    'Theorem is a website that lets you launch and trade coins on the pump.fun program on Solana. Each coin carries a mathematical statement written on-chain by its creator.',
-    'Theorem does not issue coins, hold your funds or keys, or run the pump.fun program. Your wallet signs every transaction, and Theorem cannot move your funds.',
+  ['What Theorema is', [
+    'Theorema is a website that lets you launch and trade coins on the pump.fun program on Solana. Each coin carries a mathematical statement written on-chain by its creator.',
+    'Theorema does not issue coins, hold your funds or keys, or run the pump.fun program. Your wallet signs every transaction, and Theorema cannot move your funds.',
   ]],
   ['You can lose everything', [
     'Coins like these are highly speculative. Prices can fall to zero quickly, and there may be no buyer when you want to sell.',
@@ -16,17 +16,17 @@ const SECTIONS: [string, string[]][] = [
   ]],
   ['Launches are permanent', [
     'A coin’s name, ticker, statement and logo cannot be changed after launch, and transactions on Solana cannot be undone. Check everything before you sign.',
-    'Creators are responsible for what they launch. Do not launch anything unlawful, misleading, infringing or abusive, and do not use images you have no right to use. Theorem may hide coins from its own pages, but cannot remove a coin from the blockchain.',
+    'Creators are responsible for what they launch. Do not launch anything unlawful, misleading, infringing or abusive, and do not use images you have no right to use. Theorema may hide coins from its own pages, but cannot remove a coin from the blockchain.',
   ]],
   ['Fees and third parties', [
     'You pay Solana network fees and account rent, and pump.fun charges its own trading and creator fees. SOL limits shown in the app do not include network fees.',
     'The site relies on third-party software and services, including pump.fun, wallets, RPC providers and price feeds. They can fail, change or be wrong. Displayed prices and USD values are estimates.',
   ]],
   ['Eligibility and local law', [
-    'You must be an adult where you live. Rules on trading digital assets differ by country, and you are responsible for following the ones that apply to you. Do not use Theorem if it is not allowed where you are.',
+    'You must be an adult where you live. Rules on trading digital assets differ by country, and you are responsible for following the ones that apply to you. Do not use Theorema if it is not allowed where you are.',
   ]],
   ['No warranty', [
-    'The site is provided as it is, without promises that it will be available, error-free or fit for any purpose. To the extent the law allows, Theorem is not liable for losses from using it.',
+    'The site is provided as it is, without promises that it will be available, error-free or fit for any purpose. To the extent the law allows, Theorema is not liable for losses from using it.',
     'This page is a plain-language summary, not legal advice.',
   ]],
 ];
@@ -44,7 +44,7 @@ export function RisksView() {
             {ps.map((p) => <p key={p} style={{ margin: '0 0 8px' }}>{p}</p>)}
           </section>
         ))}
-        <p className="muted">By launching or trading on Theorem you confirm that you have read this page. <Link href="/">Back to start</Link></p>
+        <p className="muted">By launching or trading on Theorema you confirm that you have read this page. <Link href="/">Back to start</Link></p>
       </div>
     </>
   );
